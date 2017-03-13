@@ -73,11 +73,11 @@ class PCommitment_Public_Key(fingexp.FingExp):
         '''
         Return a polynomial commitment on the polynomial phi_x eventually using phiprime_x as the randomness polynomial
         '''
-        F = self.pairing.Fp
+        Fp = self.pairing.Fp
         EFp = self.pairing.EFp
         if phiprime_x == [] :
             for i in range(self.deg_pol+1):
-                phiprime_x.append(F.random())
+                phiprime_x.append(Fp.random().val())
                 
         c = EFp.infty
         for i in range(self.deg_pol+1):
