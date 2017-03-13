@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-Created on 2013-2014
+Created on 2017
 
 Author : Edouard Cuvelier
 Affiliation : Université catholique de Louvain - ICTEAM - UCL Crypto Group
@@ -12,7 +12,7 @@ import mathTools.field as field
 import mathTools.ellipticCurve as ellipticCurve
 import mathTools.pairing as pairing
 #import ppat.ppats as ppats
-import ppat.ppats
+#import ppat.ppats
 import mathTools.otosEC as oEC
 
 import gmpy
@@ -108,6 +108,8 @@ EFp12 = ellipticCurve.ECGroup(Fp12,C12,PInf12)
 Qpr = oEC.psi(EFp12,Q) # Qpr lives in E[Fp12b]
 Pair = pairing.Pairing(EFp,EFp12,C,P,Q,n,Qpr,oEC.frobenius,oEC.prec_gamma(Fp12,u,c,d))
 
+
+"""
 ############### PPATS ########################
 x1 = randint(1,int(n-1));print "x1 is", x1
 g1 = x1*Q
@@ -133,3 +135,5 @@ ppatcpk = ppat.ppatc.PPATCPublicKey(ppatcpp,g1c,g2c,h1c)
 print 'public key (complex) ppatcpk created'
 ppatcsk = ppat.ppatc.PPATCPrivateKey(ppatcpp, ppatcpk, x1c, x2c)
 print 'secret key (complex) ppatcsk created'
+
+"""
