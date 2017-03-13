@@ -45,7 +45,7 @@ class PCommitment_Public_Key(fingexp.FingExp):
         self.deg_pol = utils.b64tompz(data["deg_pol"])
         self.gVec = utils.b64tompz(data["gVec"])
         self.hVec = utils.b64tompz(data["hVec"])
-        
+
     def __str__(self):
         return "Public Key for Polynomial Commitment:\n\t "+str(self.Pairing)+"\n\t for polynomial of degree "+str(self.deg_pol)+"\n\t with g vector: "+str(self.gVec)+"\n\t and with h vector: "+str(self.hVec)
 
@@ -54,19 +54,42 @@ class PCommitment_Public_Key(fingexp.FingExp):
         generates the public key from generators g,h and the secret key SK_PC
         the method (re-)initialize self.gVec and self.hVec
         '''
-        pass
+        alpha = SK_PC.alpha
+        gVec = [g]
+        hVec = [h]
+        for i in range(1,self.deg_pol+1):
+            g_prev = gVec[-1]
+            h_prev = hVec[-1]
+            g_i = alpha*g_prev
+            h_i = alpha*h_prev
+            gVec.append(g_i)
+            hVec.append(h_i)
+            
+        self.gVec = gVec
+        self.hVec = hVec
+            
     
-    def commit(self,phi_x,phiprime_x=None):
+    def commit(self,phi_x,phiprime_x=[]):
         '''
         Return a polynomial commitment on the polynomial phi_x eventually using phiprime_x as the randomness polynomial
         '''
-        pass
+        F = self.pairing.Fp
+        EFp = self.pairing.EFp
+        if phiprime_x == [] :
+            for i in range(self.deg_pol+1):
+                phiprime_x.append(F.random())
+                
+        c = EFp.infty
+        for i in range(self.deg_pol+1):
+            c = c + phi_x[i]*self.gVec[i] + phiprime_x[i]*self.hVec[i]
+            
+        return c
     
     def open_commitment(self,c,phi_x,phiprime_x):
         '''
         return the opening values of the commitment c, i.e. phi_x and phiprime_x
         '''
-        pass
+        return phi_x,phiprime_x
     
     def verifyPoly(self,c,phi_x,phiprime_x):
         '''
@@ -115,8 +138,8 @@ class PolynomialCommitment:
         return self.__str__()
 
     def __add__(self,e):
-        ''' Addition between two PPATS commitments
-            The result is a PPATS commitment which commits
+        ''' Addition between two Polynomial commitments
+            The result is a Polynomial commitment which commits
             on the sum of the initial messages
         '''
         assert isinstance(e,PolynomialCommitment)
@@ -145,11 +168,11 @@ class PolynomialCommitment:
 
     def __mul__(self,a):
         '''multiplication by a scalar a
-           The result is a PPATS Commitment which encrypts and commits on a*m
+           The result is a Polynomial Commitment which encrypts and commits on a*m
         '''
         m = gmpy.mpz(1)
         if not isinstance(a, int) and not isinstance(a, long) and not type(a)==type(m):
-            raise Exception("Multiplication of a PPATS Commitment by a non integer, long or mpz")
+            raise Exception("Multiplication of a Polynomail Commitment by a non integer, long or mpz")
         else :
             return PolynomialCommitment(a*self.c,self.PCom_PK)
 
