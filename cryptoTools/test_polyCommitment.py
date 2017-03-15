@@ -43,7 +43,6 @@ class TestPolyCommitment(unittest.TestCase):
         com,phiprime_x = self.pC_PK.commit(phi_x,phiprime_x)
         self.assertTrue(self.pC_PK.verifyPoly(com,phi_x,phiprime_x))
 
-
     def test_addition_of_commitments(self):
         phi1_x = self.produce_polynomial()
         phi1prime_x = self.produce_polynomial()

@@ -1001,6 +1001,81 @@ class polynom:
             return (self.F == other.F and self.coef == other.coef)
         except:
             return False
+            
+    def __add__(self,other):
+        new_coef = []
+        
+        if self.deg > other.deg :
+            dif  = self.deg-other.deg
+            other_coef_copy = other.coef+[]
+            for i in range(dif):
+                other_coef_copy = [self.F.zero()]+other_coef_copy
+            coef_copy = self.coef +[]
+        elif self.deg < other.deg :
+            dif  = other.deg-self.deg
+            coef_copy = self.coef+[]
+            for i in range(dif):
+                coef_copy = [self.F.zero()]+coef_copy
+            other_coef_copy = other.coef +[]
+        else :
+            other_coef_copy = other.coef +[]
+            coef_copy = self.coef+[]
+            
+        for i in range(max(self.deg,other.deg)):
+            new_coef.append(coef_copy[i]+other_coef_copy[i])
+            
+            
+        p = polynom(self.F,new_coef)
+        td,n = p.truedeg()
+        return polynom(self.F,p.coef[td:])
+        
+    def __neg__(self):
+        new_coef = []
+        for i in range(self.deg):
+            new_coef.append(-self.coef[i])
+        return polynom(self.F,new_coef)
+
+    def __sub__(self, other):
+        return self.__add__(other.__neg__())
+
+    def __radd__(self, other):
+        return self.__add__(other)
+
+    def __mul__(self, other):
+        m = gmpy.mpz(1)
+        if isinstance(other,int) or isinstance(other, long) or type(other)==type(m) or isinstance(other,FieldElem) :
+            new_coef = []
+            for i in range(self.deg):
+                new_coef.append(other*self.coef[i])
+            return polynom(self.F,new_coef)
+        elif isinstance(other,polynom):
+            new_coef = list(convolve(self.coef,other.coef))
+            return polynom(self.F,new_coef)
+            
+    def __rmul__(self, alpha):
+        return self.__mul__(alpha)
+        
+    def __div__(self,other):
+        if self.deg<other.deg :
+            return polynom(self.F,[self.F.zero()]), self
+            
+        elif self == other :
+            return polynom(self.F,[self.F.one()]), polynom(self.F,[self.F.zero()])
+        else :
+            a = self.coef[0]
+            b = other.coef[0]
+            dif = self.deg-other.deg
+            s = a/b
+            L = [s]
+            for i in range(dif):
+                L.append(self.F.zero())
+                
+            k = polynom(self.F,L)
+            denom = self-(k.__mul__(other))
+            print denom
+            q,r = denom/other
+            return q+k,r
+            
 
     def __str__(self):
         # Not consistent with representation letter of the fields
