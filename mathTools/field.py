@@ -209,6 +209,9 @@ class Field(fingexp.FingExp):
 
     def __str__(self):
         return "F_"+str(self.p)
+        
+    def __repr__(self):
+        return self.__str__()
 
     def jsonable(self):
         return {'type': 'FqField', 'p': self.p}
@@ -263,6 +266,9 @@ class FieldElem():
 
     def __str__(self):
         return str(self.val)
+        
+    def __repr__(self):
+        return self.__str__()
 
     def iszero(self):
         return self == self.F.zero()
@@ -927,6 +933,9 @@ class ExtensionField(Field):
 
     def __str__(self):
         return str(self.F)+"/"+str(self.irpoly)
+        
+    def __repr__(self):
+        return self.__str__()
 
     def jsonable(self):
         return {'type': 'Field Extension', 'F': self.F, 'irpoly': self.irpoly, 'degree':self.deg-1}
@@ -955,6 +964,9 @@ class ExtensionFieldElem(FieldElem):
                 s = s+' + '+str(p.coef[i])+'*'+x+'**'+str(self.siz-1-i)
             s = s+' + '+str(p.coef[self.siz-2])+'*'+x +' + '+str(p.coef[self.siz-1])
         return s+')'
+        
+    def __repr__(self):
+        return self.__str__()
 
     def __eq__(self,other):
         try:
@@ -1006,6 +1018,9 @@ class polynom:
                 s = s+' + '+str(self.coef[i])+'*'+x+'**'+str(self.deg-1-i)
             s = s+' + '+str(self.coef[self.deg-2])+'*'+x +' + '+str(self.coef[self.deg-1])
         return s+')'
+        
+    def __repr__(self):
+        return self.__str__()
 
     def fingerprint(self):
         L = []

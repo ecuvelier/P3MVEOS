@@ -11,6 +11,7 @@ email : firstname.lastname@uclouvain.be
 import tools.fingexp as fingexp
 import tools.utils as utils
 import mathTools.pairing as pair
+import mathTools.field as field
 import gmpy
 
 class PCommitment_Secret_Key(fingexp.FingExp):
@@ -47,7 +48,7 @@ class PCommitment_Public_Key(fingexp.FingExp):
         self.hVec = utils.b64tompz(data["hVec"])
 
     def __str__(self):
-        return "Public Key for Polynomial Commitment:\n\t "+str(self.Pairing)+"\n\t for polynomial of degree "+str(self.deg_pol)+"\n\t with g vector: "+str(self.gVec)+"\n\t and with h vector: "+str(self.hVec)
+        return "Public Key for Polynomial Commitment:\n\t "+str(self.pairing)+"\n\t for polynomial of degree "+str(self.deg_pol)+"\n\t with g vector: "+str(self.gVec)+"\n\t and with h vector: "+str(self.hVec)
 
     def setup(self,g,h,SK_PC):
         '''
@@ -64,26 +65,31 @@ class PCommitment_Public_Key(fingexp.FingExp):
             h_i = alpha*h_prev
             gVec.append(g_i)
             hVec.append(h_i)
-            
+        
+        gVec.reverse()
+        hVec.reverse()
         self.gVec = gVec
         self.hVec = hVec
             
     
-    def commit(self,phi_x,phiprime_x=[]):
+    def commit(self,phi_x,phiprime_x= None):
         '''
         Return a polynomial commitment on the polynomial phi_x eventually using phiprime_x as the randomness polynomial
         '''
         Fp = self.pairing.Fp
         EFp = self.pairing.EFp
-        if phiprime_x == [] :
+        if phiprime_x == None :
+            L = []
             for i in range(self.deg_pol+1):
-                phiprime_x.append(Fp.random().val())
+                L.append(Fp.random())
+            
+            phiprime_x = field.polynom(Fp,L)
                 
         c = EFp.infty
         for i in range(self.deg_pol+1):
-            c = c + phi_x[i]*self.gVec[i] + phiprime_x[i]*self.hVec[i]
+            c = c + phi_x.coef[i].val*self.gVec[i] + phiprime_x.coef[i].val*self.hVec[i]
             
-        return c
+        return c, phiprime_x
     
     def open_commitment(self,c,phi_x,phiprime_x):
         '''
@@ -96,14 +102,28 @@ class PCommitment_Public_Key(fingexp.FingExp):
         Check that the commitment c is indeed a commitment on phi_x and phiprime_x
         return True if it is the case
         '''
-        pass
+        EFp = self.pairing.EFp
+        c_prime = EFp.infty
+        for i in range(self.deg_pol+1):
+            c_prime = c_prime + phi_x.coef[i].val*self.gVec[i] + phiprime_x.coef[i].val*self.hVec[i]
+            
+        return c == c_prime
     
     def createWitness(self,phi_x,phiprime_x,b):
         '''
         Return a witness w_b for the point (b,phi(b)) to prove latter that phi(b) is the 
         evaluation of phi on b
         '''
-        pass
+        EFp = self.pairing.EFp
+        w_b = EFp.infty
+        
+        psi_x = []
+        psiprime_x = []
+            
+        for i in range(self.deg_pol+1):
+            w_b = w_b + psi_x[i]*self.gVec[i] + psiprime_x[i]*self.hVec[i]
+            
+        return None
     
     def verifyEval(self, c,b,phi_b,phiprime_b,w_b):
         '''
