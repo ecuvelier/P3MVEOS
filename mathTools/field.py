@@ -1072,7 +1072,7 @@ class polynom:
                 
             k = polynom(self.F,L)
             denom = self-(k.__mul__(other))
-            print denom
+            #print denom
             q,r = denom/other
             return q+k,r
             
@@ -1112,6 +1112,20 @@ class polynom:
             pcond = i.iszero()
             cond = pcond*cond
         return cond
+        
+    def evaluate(self,a):
+        '''
+        Evaluates the polynomial at point a
+        '''
+        coef_copy = self.coef +[]
+        coef_copy.reverse()
+        apow = a
+        eva = coef_copy[0]
+        for i in range(1,self.deg):
+            eva = eva+apow*coef_copy[i]
+            apow = a*apow
+            
+        return eva
 
     def truedeg(self):
         '''Return the position of the first non zero coefficient and the actual degree of the polynomial

@@ -114,16 +114,21 @@ class PCommitment_Public_Key(fingexp.FingExp):
         Return a witness w_b for the point (b,phi(b)) to prove latter that phi(b) is the 
         evaluation of phi on b
         '''
+        Fp = self.pairing.Fp
         EFp = self.pairing.EFp
         w_b = EFp.infty
         
-        psi_x = []
-        psiprime_x = []
+        phi_b = field.polynom(Fp,[phi_x.evaluate(b)])
+        x_minus_b = field.polynom(Fp,[Fp.one(),-Fp.elem(b)])
+        psi_x = (phi_x-phi_b)/x_minus_b
+        
+        phiprime_b = field.polynom(Fp,[phiprime_x.evaluate(b)])
+        psiprime_x = (phiprime_x-phiprime_b)/x_minus_b
             
         for i in range(self.deg_pol+1):
-            w_b = w_b + psi_x[i]*self.gVec[i] + psiprime_x[i]*self.hVec[i]
+            w_b = w_b + psi_x.coef[i].val*self.gVec[i] + psiprime_x.coef[i].val*self.hVec[i]
             
-        return None
+        return b, phi_b, phiprime_b, w_b
     
     def verifyEval(self, c,b,phi_b,phiprime_b,w_b):
         '''
