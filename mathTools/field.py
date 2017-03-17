@@ -1056,7 +1056,9 @@ class polynom:
         return self.__mul__(alpha)
         
     def __div__(self,other):
-        if self.deg<other.deg :
+        if self.iszero() :
+            return polynom(self.F,[self.F.zero()]), polynom(self.F,[self.F.zero()])
+        elif self.deg<other.deg :
             return polynom(self.F,[self.F.zero()]), self
             
         elif self == other :
@@ -1072,7 +1074,7 @@ class polynom:
                 
             k = polynom(self.F,L)
             denom = self-(k.__mul__(other))
-            #print denom
+            #print 'denom ', denom
             q,r = denom/other
             return q+k,r
             
@@ -1122,7 +1124,7 @@ class polynom:
         apow = a
         eva = coef_copy[0]
         for i in range(1,self.deg):
-            eva = eva+apow*coef_copy[i]
+            eva = eva+apow*coef_copy[i] 
             apow = a*apow
             
         return eva

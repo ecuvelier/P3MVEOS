@@ -1356,6 +1356,8 @@ def OptimTatePairing(P,Q,Pair):
     ############## Algorithm for the Tate Pairing #################################
     #init
     x = Fpk.one()
+    if P.infty or Q.infty :
+        return x
     Z = P
     rbin = bin(r)
     t = len(rbin)-1 # r = r_2...r_t where r_i is in {0,1} the bit repr. of r
@@ -1464,6 +1466,8 @@ def OptimAtePairing(P,Q,Pair,Jcoord=False):
 
     ############## Algorithm for the Ate Pairing ##################################
     # init
+    if P.infty or Q.infty :
+        return Fpk1
     Qt = toTupleEFp2(Q,Jcoord)
     #Qtj = toTupleEFp2(Q,True)
     Tt = Qt

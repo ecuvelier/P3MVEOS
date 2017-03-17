@@ -256,6 +256,9 @@ class ECGroup(fingexp.FingExp):
 
     def __str__(self):
         return "Elliptic Curve Group E("+str(self.E)+")"
+        
+    def __repr__(self):
+        return self.__str__()
 
 
     def jsonable(self):

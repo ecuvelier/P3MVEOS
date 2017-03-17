@@ -12,6 +12,7 @@ import tools.fingexp as fingexp
 import tools.utils as utils
 import mathTools.pairing as pair
 import mathTools.field as field
+import mathTools.otosEC as oEC
 import gmpy
 
 class PCommitment_Secret_Key(fingexp.FingExp):
@@ -30,27 +31,35 @@ class PCommitment_Secret_Key(fingexp.FingExp):
 
 class PCommitment_Public_Key(fingexp.FingExp):
     
-    def __init__(self,pairing,deg_pol,gVec,hVec):
+    def __init__(self,pairing,deg_pol,gVec=[],hVec=[],gprime=None,gprime_alpha=None):
         self.pairing = pairing
         assert isinstance(self.pairing,pair.Pairing)
         self.deg_pol = deg_pol
         assert deg_pol > 0
         self.gVec = gVec
         self.hVec = hVec
+        self.gprime = gprime
+        self.gprime_alpha = gprime_alpha
         
-        self.to_fingerprint = ["pairing","deg_pol","gVec","hVec"]
-        self.to_export = {"fingerprint": [],"value": ["pairing","deg_pol","gVec","hVec"]}
+        self.to_fingerprint = ["pairing","deg_pol","gVec","hVec","gprime","gprime_alpha"]
+        self.to_export = {"fingerprint": [],"value": ["pairing","deg_pol","gVec","hVec","gprime","gprime_alpha"]}
 
     def load(self, data, fingerprints):
         self.pairing = utils.b64tompz(data["pairing"])
         self.deg_pol = utils.b64tompz(data["deg_pol"])
         self.gVec = utils.b64tompz(data["gVec"])
         self.hVec = utils.b64tompz(data["hVec"])
+        self.gprime = utils.b64tompz(data["gprime"])
+        self.gprime_alpha = utils.b64tompz(data["gprime_alpha"])
+        
+        
+    def __eq__(self, other):
+       return (self.deg_pol == other.deg_pol and self.gVec == other.gVec and self.hVec == other.hVec  and self.gprime == other.gprime and self.gprime_alpha == other.gprime_alpha)
 
     def __str__(self):
         return "Public Key for Polynomial Commitment:\n\t "+str(self.pairing)+"\n\t for polynomial of degree "+str(self.deg_pol)+"\n\t with g vector: "+str(self.gVec)+"\n\t and with h vector: "+str(self.hVec)
 
-    def setup(self,g,h,SK_PC):
+    def setup(self,g,h,gp,SK_PC):
         '''
         generates the public key from generators g,h and the secret key SK_PC
         the method (re-)initialize self.gVec and self.hVec
@@ -58,6 +67,7 @@ class PCommitment_Public_Key(fingexp.FingExp):
         alpha = SK_PC.alpha
         gVec = [g]
         hVec = [h]
+        gprime_alpha = alpha*gp
         for i in range(1,self.deg_pol+1):
             g_prev = gVec[-1]
             h_prev = hVec[-1]
@@ -70,6 +80,8 @@ class PCommitment_Public_Key(fingexp.FingExp):
         hVec.reverse()
         self.gVec = gVec
         self.hVec = hVec
+        self.gprime = gp
+        self.gprime_alpha = gprime_alpha
             
     
     def commit(self,phi_x,phiprime_x= None):
@@ -90,6 +102,23 @@ class PCommitment_Public_Key(fingexp.FingExp):
             c = c + phi_x.coef[i].val*self.gVec[i] + phiprime_x.coef[i].val*self.hVec[i]
             
         return c, phiprime_x
+        
+    def commit_messages(self,messageslist,phiprime_x= None):
+        assert len(messageslist)<=self.deg_pol
+        
+        Fp = self.pairing.Fp
+        mlist_copy = messageslist+[]
+        if len(messageslist) < self.deg_pol :
+            for i in range(self.deg_pol-len(messageslist)):
+                mlist_copy.append(Fp.zero())
+                
+        phi_x = field.polynom(Fp,[Fp.one()])
+        for i in range(self.deg_pol):
+            x_minus_m_i = field.polynom(Fp,[Fp.one(),-mlist_copy[i]])
+            phi_x = phi_x*x_minus_m_i
+            
+        return phi_x, self.commit(phi_x,phiprime_x)
+            
     
     def open_commitment(self,c,phi_x,phiprime_x):
         '''
@@ -116,19 +145,35 @@ class PCommitment_Public_Key(fingexp.FingExp):
         '''
         Fp = self.pairing.Fp
         EFp = self.pairing.EFp
+        order = self.pairing.r
         w_b = EFp.infty
         
         phi_b = field.polynom(Fp,[phi_x.evaluate(b)])
         x_minus_b = field.polynom(Fp,[Fp.one(),-Fp.elem(b)])
-        psi_x = (phi_x-phi_b)/x_minus_b
+        #print 'x_minus_b ', x_minus_b
+        #print '(phi_x-phi_b )', (phi_x-phi_b)
+        psi_x, rem1 = (phi_x-phi_b)/x_minus_b
         
-        phiprime_b = field.polynom(Fp,[phiprime_x.evaluate(b)])
-        psiprime_x = (phiprime_x-phiprime_b)/x_minus_b
+        evalue = phiprime_x.evaluate(b)
+        #print evalue,evalue<order
+        phiprime_b = field.polynom(Fp,[evalue])
+        psiprime_x, rem2 = (phiprime_x-phiprime_b)/x_minus_b
+        
+        #print 'psi_x ',psi_x
+        #print 'psiprime_x ',psiprime_x
+        
+        assert rem1.iszero()
+        assert rem2.iszero()
+        
+        L = [Fp.zero()]+psi_x.coef
+        psi_x = field.polynom(Fp,L)
+        K = [Fp.zero()]+psiprime_x.coef
+        psiprime_x = field.polynom(Fp,K)
             
         for i in range(self.deg_pol+1):
             w_b = w_b + psi_x.coef[i].val*self.gVec[i] + psiprime_x.coef[i].val*self.hVec[i]
             
-        return b, phi_b, phiprime_b, w_b
+        return b.val, phi_b.coef[0].val, phiprime_b.coef[0].val, w_b
     
     def verifyEval(self, c,b,phi_b,phiprime_b,w_b):
         '''
@@ -138,6 +183,22 @@ class PCommitment_Public_Key(fingexp.FingExp):
         Return True if the verification succeeds.
         This method computes 3 pairings.
         '''
+        
+        #ECG = c.ECG
+        #Jcoord = self.PPATSpp.Jcoord
+        #order = self.PPATSpp.order
+        
+        e = oEC.OptimAtePairing
+        Pair = self.pairing
+        g = self.gVec[-1]
+        h = self.hVec[-1]
+        gp = self.gprime
+        
+        gprime_b = b*gp
+        t1 = self.gprime_alpha-gprime_b
+        u1 = phi_b*g + phiprime_b*h
+        
+        return e(c,gp,Pair) == e(w_b,t1,Pair)*e(u1,gp,Pair)
         
 
 class PolynomialCommitment:
