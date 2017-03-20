@@ -1128,6 +1128,20 @@ class polynom:
             apow = a*apow
             
         return eva
+        
+    def evaluate_mpz(self,a):
+        '''
+        Evaluates the polynomial at point a
+        '''
+        coef_copy = self.coef +[]
+        coef_copy.reverse()
+        apow = a
+        eva = coef_copy[0].val
+        for i in range(1,self.deg):
+            eva = eva+apow*coef_copy[i].val
+            apow = a*apow
+            
+        return eva
 
     def truedeg(self):
         '''Return the position of the first non zero coefficient and the actual degree of the polynomial

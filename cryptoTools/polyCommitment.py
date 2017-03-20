@@ -33,6 +33,7 @@ class PCommitment_Public_Key(fingexp.FingExp):
     
     def __init__(self,pairing,deg_pol,gVec=[],hVec=[],gprime=None,gprime_alpha=None):
         self.pairing = pairing
+        self.Fr = field.Field(self.pairing.r)
         assert isinstance(self.pairing,pair.Pairing)
         self.deg_pol = deg_pol
         assert deg_pol > 0
@@ -88,33 +89,36 @@ class PCommitment_Public_Key(fingexp.FingExp):
         '''
         Return a polynomial commitment on the polynomial phi_x eventually using phiprime_x as the randomness polynomial
         '''
-        Fp = self.pairing.Fp
+        #Fp = self.pairing.Fp
+        Fr = self.Fr
         EFp = self.pairing.EFp
+        #order = self.pairing.r
+        
         if phiprime_x == None :
             L = []
             for i in range(self.deg_pol+1):
-                L.append(Fp.random())
+                L.append(Fr.random())
             
-            phiprime_x = field.polynom(Fp,L)
+            phiprime_x = field.polynom(Fr,L)
                 
         c = EFp.infty
         for i in range(self.deg_pol+1):
-            c = c + phi_x.coef[i].val*self.gVec[i] + phiprime_x.coef[i].val*self.hVec[i]
+            c = c + (phi_x.coef[i].val)*self.gVec[i] + (phiprime_x.coef[i].val)*self.hVec[i]
             
         return c, phiprime_x
         
     def commit_messages(self,messageslist,phiprime_x= None):
         assert len(messageslist)<=self.deg_pol
         
-        Fp = self.pairing.Fp
+        Fr = self.Fr
         mlist_copy = messageslist+[]
         if len(messageslist) < self.deg_pol :
             for i in range(self.deg_pol-len(messageslist)):
-                mlist_copy.append(Fp.zero())
+                mlist_copy.append(Fr.zero())
                 
-        phi_x = field.polynom(Fp,[Fp.one()])
+        phi_x = field.polynom(Fr,[Fr.one()])
         for i in range(self.deg_pol):
-            x_minus_m_i = field.polynom(Fp,[Fp.one(),-mlist_copy[i]])
+            x_minus_m_i = field.polynom(Fr,[Fr.one(),-mlist_copy[i]])
             phi_x = phi_x*x_minus_m_i
             
         return phi_x, self.commit(phi_x,phiprime_x)
@@ -132,9 +136,11 @@ class PCommitment_Public_Key(fingexp.FingExp):
         return True if it is the case
         '''
         EFp = self.pairing.EFp
+        #order = self.pairing.r
+        
         c_prime = EFp.infty
         for i in range(self.deg_pol+1):
-            c_prime = c_prime + phi_x.coef[i].val*self.gVec[i] + phiprime_x.coef[i].val*self.hVec[i]
+            c_prime = c_prime + (phi_x.coef[i].val)*self.gVec[i] + (phiprime_x.coef[i].val)*self.hVec[i]
             
         return c == c_prime
     
@@ -143,37 +149,44 @@ class PCommitment_Public_Key(fingexp.FingExp):
         Return a witness w_b for the point (b,phi(b)) to prove latter that phi(b) is the 
         evaluation of phi on b
         '''
-        Fp = self.pairing.Fp
+        #Fp = self.pairing.Fp
+        Fr = self.Fr
         EFp = self.pairing.EFp
         order = self.pairing.r
         w_b = EFp.infty
         
-        phi_b = field.polynom(Fp,[phi_x.evaluate(b)])
-        x_minus_b = field.polynom(Fp,[Fp.one(),-Fp.elem(b)])
+        phi_b_eval = phi_x.evaluate(b)#
+        
+        phi_b = field.polynom(Fr,[phi_b_eval])
+        x_minus_b = field.polynom(Fr,[Fr.one(),-b])
         #print 'x_minus_b ', x_minus_b
         #print '(phi_x-phi_b )', (phi_x-phi_b)
         psi_x, rem1 = (phi_x-phi_b)/x_minus_b
         
-        evalue = phiprime_x.evaluate(b)
-        #print evalue,evalue<order
-        phiprime_b = field.polynom(Fp,[evalue])
+        phiprime_b_eval = phiprime_x.evaluate(b)#
+        #print 'phiprime_b_eval', phiprime_b_eval<order
+        phiprime_b = field.polynom(Fr,[phiprime_b_eval])
         psiprime_x, rem2 = (phiprime_x-phiprime_b)/x_minus_b
         
-        #print 'psi_x ',psi_x
-        #print 'psiprime_x ',psiprime_x
+        '''
+        print 'psi_x ',psi_x
+        print 'psiprime_x ',psiprime_x
+        print 'rem1 ',rem1
+        print 'rem2 ',rem2
+        '''
         
         assert rem1.iszero()
         assert rem2.iszero()
         
-        L = [Fp.zero()]+psi_x.coef
-        psi_x = field.polynom(Fp,L)
-        K = [Fp.zero()]+psiprime_x.coef
-        psiprime_x = field.polynom(Fp,K)
+        L = [Fr.zero()]+psi_x.coef
+        psi_x = field.polynom(Fr,L)
+        K = [Fr.zero()]+psiprime_x.coef
+        psiprime_x = field.polynom(Fr,K)
             
         for i in range(self.deg_pol+1):
-            w_b = w_b + psi_x.coef[i].val*self.gVec[i] + psiprime_x.coef[i].val*self.hVec[i]
+            w_b = w_b + (psi_x.coef[i].val%order)*self.gVec[i] + (psiprime_x.coef[i].val%order)*self.hVec[i]
             
-        return b.val, phi_b.coef[0].val, phiprime_b.coef[0].val, w_b
+        return b, phi_b_eval, phiprime_b_eval, w_b
     
     def verifyEval(self, c,b,phi_b,phiprime_b,w_b):
         '''
@@ -184,9 +197,7 @@ class PCommitment_Public_Key(fingexp.FingExp):
         This method computes 3 pairings.
         '''
         
-        #ECG = c.ECG
-        #Jcoord = self.PPATSpp.Jcoord
-        #order = self.PPATSpp.order
+        #order = self.pairing.r
         
         e = oEC.OptimAtePairing
         Pair = self.pairing
@@ -194,9 +205,9 @@ class PCommitment_Public_Key(fingexp.FingExp):
         h = self.hVec[-1]
         gp = self.gprime
         
-        gprime_b = b*gp
+        gprime_b = (b.val)*gp
         t1 = self.gprime_alpha-gprime_b
-        u1 = phi_b*g + phiprime_b*h
+        u1 = (phi_b.val)*g + (phiprime_b.val)*h
         
         return e(c,gp,Pair) == e(w_b,t1,Pair)*e(u1,gp,Pair)
         

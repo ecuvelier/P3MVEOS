@@ -11,16 +11,17 @@ email : firstname.lastname@uclouvain.be
 import unittest
 import mathTools.field as field
 from Crypto.Random.random import randint
-from script import P, Pair, Fp
+from script import P, Q, Pair, Fr
 import cryptoTools.polyCommitment as pC
 #import nizkproofs.nizkpok as nizk
 
 poly_deg = 10
-pC_SK = pC.PCommitment_Secret_Key(Fp.random().val)
+pC_SK = pC.PCommitment_Secret_Key(Fr.random().val)
 g0 = P
 h0 = pC_SK.alpha*g0
+gp = Q
 pC_PK = pC.PCommitment_Public_Key(Pair,poly_deg,[],[])
-pC_PK.setup(g0,h0,pC_SK)
+pC_PK.setup(g0,h0,gp,pC_SK)
 
 class TestPolyCommitment(unittest.TestCase):
 
@@ -32,9 +33,9 @@ class TestPolyCommitment(unittest.TestCase):
     def produce_polynomial(self):
         phi_x_coef = []
         for i in range(poly_deg+1):
-            phi_x_coef.append(Fp.random())
+            phi_x_coef.append(Fr.random())
         
-        return field.polynom(Fp,phi_x_coef)
+        return field.polynom(Fr,phi_x_coef)
 
     def test_commitment_and_verify(self):
         phi_x = self.produce_polynomial()
@@ -53,7 +54,7 @@ class TestPolyCommitment(unittest.TestCase):
         com2,phi2prime_x = self.pC_PK.commit(phi2_x,phi2prime_x)
         
         com3 = com1+com2
-        com3p,phi3p = self.ppatspk.commit(phi1_x+phi2_x,phi1prime_x+phi2prime_x)
+        com3p,phi3p = self.pC_PK.commit(phi1_x+phi2_x,phi1prime_x+phi2prime_x)
         self.assertTrue(com3==com3p)
 
     def test_multiplication_of_commitment_by_a_scalar(self):
@@ -65,7 +66,16 @@ class TestPolyCommitment(unittest.TestCase):
         com2 = a*com1
         com2p,phi2p = self.pC_PK.commit(a*phi1_x,a*phi1prime_x)
         self.assertTrue(com2==com2p)
-
+        
+    def test_verification_of_evaluation_of_polynomial_using_a_witness(self):
+        phi_x = self.produce_polynomial()
+        phiprime_x = self.produce_polynomial()
+        com,phiprime_x = self.pC_PK.commit(phi_x,phiprime_x)
+        
+        b = Fr.random()
+        b,phi_b,phiprime_b,w_b = self.pC_PK.createWitness(phi_x,phiprime_x,b)
+        
+        self.assertTrue(self.pC_PK.verifyEval(com,b,phi_b,phiprime_b,w_b))
 
 suite = unittest.TestLoader().loadTestsFromTestCase(TestPolyCommitment)
 unittest.TextTestRunner(verbosity=2).run(suite)

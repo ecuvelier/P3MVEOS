@@ -110,27 +110,38 @@ EFp12 = ellipticCurve.ECGroup(Fp12,C12,PInf12)
 Qpr = oEC.psi(EFp12,Q) # Qpr lives in E[Fp12b]
 Pair = pairing.Pairing(EFp,EFp12,C,P,Q,n,Qpr,oEC.frobenius,oEC.prec_gamma(Fp12,u,c,d))
 
-poly_deg = 1
-
-pC_SK = pC.PCommitment_Secret_Key(5)
+poly_deg = 3
+alpha = Fp.random().val
+#alpha = 5
+pC_SK = pC.PCommitment_Secret_Key(alpha)
 g0 = P
 h0 = rP
 gp = Q
 
+
+Fr = field.Field(n)
 pC_PK = pC.PCommitment_Public_Key(Pair,poly_deg)
 pC_PK.setup(g0,h0,gp,pC_SK)
 
 poly_coef = []
+phiprime_coef = []
 for i in range(poly_deg+1):
-    poly_coef.append(Fp.elem(i+1))
+    poly_coef.append(Fr.elem(i+1))
+    phiprime_coef.append(Fr.elem(i+2))
 
-phi_x = field.polynom(Fp,poly_coef)
+phi_x = field.polynom(Fr,poly_coef)
+phiprime_x = field.polynom(Fr,phiprime_coef)
+com, phiprime_x = pC_PK.commit(phi_x,phiprime_x)
 
 #D = pC_PK.commit_messages([1,2,3])
 #phi_x,c = D
-#phi_x = field.polynom(Fp,[fp1,2*fp1,3*fp1,fp0])
-#phiprime_x = field.polynom(Fp,[223*fp1,fp1,2*fp1,40*fp1])
-com, phiprime_x = pC_PK.commit(phi_x,None)
+
+'''
+phi_x = field.polynom(Fp,[fp1,2*fp1,3*fp1,fp0])
+phiprime_x = field.polynom(Fp,[2*fp1,fp1,2*fp1,fp0])
+com, phiprime_x = pC_PK.commit(phi_x,phiprime_x)
+'''
+
 
 
 """
