@@ -31,7 +31,7 @@ class PCommitment_Secret_Key(fingexp.FingExp):
 
 class PCommitment_Public_Key(fingexp.FingExp):
     
-    def __init__(self,pairing,deg_pol,gVec=[],hVec=[],gprime=None,gprime_alpha=None):
+    def __init__(self,pairing,deg_pol,gVec=[],hVec=[],gprimeVec=[]):
         self.pairing = pairing
         self.Fr = field.Field(self.pairing.r)
         assert isinstance(self.pairing,pair.Pairing)
@@ -39,26 +39,24 @@ class PCommitment_Public_Key(fingexp.FingExp):
         assert deg_pol > 0
         self.gVec = gVec
         self.hVec = hVec
-        self.gprime = gprime
-        self.gprime_alpha = gprime_alpha
+        self.gprimeVec = gprimeVec
+
         
-        self.to_fingerprint = ["pairing","deg_pol","gVec","hVec","gprime","gprime_alpha"]
-        self.to_export = {"fingerprint": [],"value": ["pairing","deg_pol","gVec","hVec","gprime","gprime_alpha"]}
+        self.to_fingerprint = ["pairing","deg_pol","gVec","hVec","gprimeVec"]
+        self.to_export = {"fingerprint": [],"value": ["pairing","deg_pol","gVec","hVec","gprimeVec"]}
 
     def load(self, data, fingerprints):
         self.pairing = utils.b64tompz(data["pairing"])
         self.deg_pol = utils.b64tompz(data["deg_pol"])
         self.gVec = utils.b64tompz(data["gVec"])
         self.hVec = utils.b64tompz(data["hVec"])
-        self.gprime = utils.b64tompz(data["gprime"])
-        self.gprime_alpha = utils.b64tompz(data["gprime_alpha"])
-        
+        self.gprimeVec = utils.b64tompz(data["gprimeVec"])    
         
     def __eq__(self, other):
-       return (self.deg_pol == other.deg_pol and self.gVec == other.gVec and self.hVec == other.hVec  and self.gprime == other.gprime and self.gprime_alpha == other.gprime_alpha)
+       return (self.deg_pol == other.deg_pol and self.gVec == other.gVec and self.hVec == other.hVec  and self.gprimeVec == other.gprimeVec )
 
     def __str__(self):
-        return "Public Key for Polynomial Commitment:\n\t "+str(self.pairing)+"\n\t for polynomial of degree "+str(self.deg_pol)+"\n\t with g vector: "+str(self.gVec)+"\n\t and with h vector: "+str(self.hVec)
+        return "Public Key for Polynomial Commitment:\n\t "+str(self.pairing)+"\n\t for polynomial of degree "+str(self.deg_pol)+"\n\t with g vector: "+str(self.gVec)+"\n\t and with h vector: "+str(self.hVec)+"\n\t and with gprime vector: "+str(self.gprimeVec)
 
     def setup(self,g,h,gp,SK_PC):
         '''
@@ -68,22 +66,24 @@ class PCommitment_Public_Key(fingexp.FingExp):
         alpha = SK_PC.alpha
         gVec = [g]
         hVec = [h]
-        gprime_alpha = alpha*gp
+        gprimeVec = [gp]
         for i in range(1,self.deg_pol+1):
             g_prev = gVec[-1]
             h_prev = hVec[-1]
+            gp_prev = gprimeVec[-1]
             g_i = alpha*g_prev
             h_i = alpha*h_prev
+            gp_i = alpha*gp_prev
             gVec.append(g_i)
             hVec.append(h_i)
+            gprimeVec.append(gp_i)
         
         gVec.reverse()
         hVec.reverse()
+        gprimeVec.reverse()
         self.gVec = gVec
         self.hVec = hVec
-        self.gprime = gp
-        self.gprime_alpha = gprime_alpha
-            
+        self.gprimeVec = gprimeVec            
     
     def commit(self,phi_x,phiprime_x= None):
         '''
@@ -94,12 +94,27 @@ class PCommitment_Public_Key(fingexp.FingExp):
         EFp = self.pairing.EFp
         #order = self.pairing.r
         
+        assert len(phi_x.coef) <= self.deg_pol+1
+        if len(phi_x.coef) < self.deg_pol+1 :
+            # Append zeros coef to phi_x if its coef list is too short (< deg_pol+1)
+            diff = self.deg_pol+1 - len(phi_x.coef)
+            L = [Fr.zero()]*diff
+            new_phi_x = field.polynom(Fr,L+phi_x.coef)
+            phi_x = new_phi_x
+        
         if phiprime_x == None :
             L = []
             for i in range(self.deg_pol+1):
                 L.append(Fr.random())
             
             phiprime_x = field.polynom(Fr,L)
+            
+        if len(phiprime_x.coef) < self.deg_pol+1 :
+            # Append zeros coef to phiprime_x if its coef list is too short (< deg_pol+1)
+            diff = self.deg_pol+1 - len(phiprime_x.coef)
+            L = [Fr.zero()]*diff
+            new_phiprime_x = field.polynom(Fr,L+phiprime_x.coef)
+            phiprime_x = new_phiprime_x
                 
         c = EFp.infty
         for i in range(self.deg_pol+1):
@@ -151,11 +166,11 @@ class PCommitment_Public_Key(fingexp.FingExp):
         '''
         #Fp = self.pairing.Fp
         Fr = self.Fr
-        EFp = self.pairing.EFp
-        order = self.pairing.r
-        w_b = EFp.infty
+        #EFp = self.pairing.EFp
+        #order = self.pairing.r
+        #w_b = EFp.infty
         
-        phi_b_eval = phi_x.evaluate(b)#
+        phi_b_eval = phi_x.evaluate(b)
         
         phi_b = field.polynom(Fr,[phi_b_eval])
         x_minus_b = field.polynom(Fr,[Fr.one(),-b])
@@ -178,13 +193,18 @@ class PCommitment_Public_Key(fingexp.FingExp):
         assert rem1.iszero()
         assert rem2.iszero()
         
+        '''
         L = [Fr.zero()]+psi_x.coef
         psi_x = field.polynom(Fr,L)
         K = [Fr.zero()]+psiprime_x.coef
         psiprime_x = field.polynom(Fr,K)
-            
+        
+        
         for i in range(self.deg_pol+1):
-            w_b = w_b + (psi_x.coef[i].val%order)*self.gVec[i] + (psiprime_x.coef[i].val%order)*self.hVec[i]
+            #w_b = w_b + (psi_x.coef[i].val%order)*self.gVec[i] + (psiprime_x.coef[i].val%order)*self.hVec[i]
+            w_b = w_b + (psi_x.coef[i].val)*self.gVec[i] + (psiprime_x.coef[i].val)*self.hVec[i]
+        '''
+        w_b, psiprime_x = self.commit(psi_x,psiprime_x)
             
         return b, phi_b_eval, phiprime_b_eval, w_b
     
@@ -203,13 +223,78 @@ class PCommitment_Public_Key(fingexp.FingExp):
         Pair = self.pairing
         g = self.gVec[-1]
         h = self.hVec[-1]
-        gp = self.gprime
+        gp = self.gprimeVec[-1]
+        gp_alpha = self.gprimeVec[-2]
         
         gprime_b = (b.val)*gp
-        t1 = self.gprime_alpha-gprime_b
+        t1 = gp_alpha-gprime_b
         u1 = (phi_b.val)*g + (phiprime_b.val)*h
         
         return e(c,gp,Pair) == e(w_b,t1,Pair)*e(u1,gp,Pair)
+        
+    def createWitnessBatch(self,phi_x,phiprime_x,B):
+        '''
+        Return a witness w_b for the list of points (b_j,phi(b_j)) where b_j in 
+        the list B to prove latter that each phi(b_j) is the evaluation of phi on b_j
+        '''
+        Fr = self.Fr
+
+        prod_x_minus_b_j = field.polynom(Fr,[Fr.one()])
+        for b_j in B :
+            x_minus_b_j = field.polynom(Fr,[Fr.one(),-b_j])
+            prod_x_minus_b_j *= x_minus_b_j
+
+        psi_x, rem1_x = phi_x/prod_x_minus_b_j
+        psiprime_x, rem2_x = phiprime_x/prod_x_minus_b_j
+        
+        w_B, psiprime_x = self.commit(psi_x,psiprime_x)
+            
+        return B, rem1_x, rem2_x, w_B
+    
+    def verifyEvalBatch(self,c, B, rem1_x, rem2_x, w_B):
+        '''
+        Check if c is a commitment on a polynomial phi such that (b_j,phi_b_j) belongs
+        to the polynomial for each b_j in B. The verification uses the witness w_B 
+        and the remainder polynomial Rx_1,Rx_2 (see self.createWitnessBatch(...)
+        for their construction).
+        Return True if the verification succeeds.
+        This method computes 3 pairings.
+        '''
+        Fr = self.Fr
+        e = oEC.OptimAtePairing
+        Pair = self.pairing
+        gp = self.gprimeVec[-1]
+        EFp2 = gp.ECG
+
+        
+        prod_x_minus_b_j = field.polynom(Fr,[Fr.one()])
+        for b_j in B :
+            x_minus_b_j = field.polynom(Fr,[Fr.one(),-b_j])
+            prod_x_minus_b_j *= x_minus_b_j
+            
+        t1 = EFp2.infty
+        for i in range(self.deg_pol+1):
+            t1 +=  prod_x_minus_b_j.coef[i].val*self.gprimeVec[i]
+        
+        
+        u1 , rem2_x = self.commit(rem1_x,rem2_x) 
+        
+        return e(c,gp,Pair) == e(w_B,t1,Pair)*e(u1,gp,Pair)
+
+        
+    def queryZKS(self,c,b):
+        '''
+        Returns a non-interactive zero-knowledge proof of knowledge that phi(b)
+        = 0 or phi(b) != 0 where phi is the polynomial commited to in c.
+        '''
+        return None
+        
+    def verifyZKS(self,c,b,proof):
+        '''
+        Checks that the NIZKPoK holds meaning that phi(b) = 0 or phi(b) != 0 
+        where phi is the polynomial commited to in c.
+        '''
+        return None
         
 
 class PolynomialCommitment:

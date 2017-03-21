@@ -137,8 +137,10 @@ com, phiprime_x = pC_PK.commit(phi_x,phiprime_x)
 #phi_x,c = D
 
 '''
-phi_x = field.polynom(Fp,[fp1,2*fp1,3*fp1,fp0])
-phiprime_x = field.polynom(Fp,[2*fp1,fp1,2*fp1,fp0])
+fr1 = Fr.one()
+fr0 = Fr.zero()
+phi_x = field.polynom(Fr,[fr1,2*fr1,3*fr1,fr0])
+phiprime_x = field.polynom(Fr,[2*fr1,fr1,2*fr1,fp0])
 com, phiprime_x = pC_PK.commit(phi_x,phiprime_x)
 '''
 
