@@ -120,9 +120,16 @@ class PCommitment_Public_Key(fingexp.FingExp):
         for i in range(self.deg_pol+1):
             c = c + (phi_x.coef[i].val)*self.gVec[i] + (phiprime_x.coef[i].val)*self.hVec[i]
             
-        return c, phiprime_x
+        com = PolynomialCommitment(c,self)
+            
+        return com, phiprime_x
         
     def commit_messages(self,messageslist,phiprime_x= None):
+        '''
+        Commit to a list of messages m_i by building the polynomial prod(x-m_i)
+        By default, messages m_j = 0 are append to the list if the lenght of 
+        messageslist is smaller than self.deg_pol
+        '''
         assert len(messageslist)<=self.deg_pol
         
         Fr = self.Fr
@@ -139,85 +146,57 @@ class PCommitment_Public_Key(fingexp.FingExp):
         return phi_x, self.commit(phi_x,phiprime_x)
             
     
-    def open_commitment(self,c,phi_x,phiprime_x):
+    def open_commitment(self,com,phi_x,phiprime_x):
         '''
         return the opening values of the commitment c, i.e. phi_x and phiprime_x
         '''
         return phi_x,phiprime_x
     
-    def verifyPoly(self,c,phi_x,phiprime_x):
+    def verifyPoly(self,com,phi_x,phiprime_x):
         '''
         Check that the commitment c is indeed a commitment on phi_x and phiprime_x
         return True if it is the case
         '''
         EFp = self.pairing.EFp
-        #order = self.pairing.r
         
         c_prime = EFp.infty
         for i in range(self.deg_pol+1):
             c_prime = c_prime + (phi_x.coef[i].val)*self.gVec[i] + (phiprime_x.coef[i].val)*self.hVec[i]
             
-        return c == c_prime
+        return com.c == c_prime
     
     def createWitness(self,phi_x,phiprime_x,b):
         '''
         Return a witness w_b for the point (b,phi(b)) to prove latter that phi(b) is the 
         evaluation of phi on b
         '''
-        #Fp = self.pairing.Fp
+
         Fr = self.Fr
-        #EFp = self.pairing.EFp
-        #order = self.pairing.r
-        #w_b = EFp.infty
         
         phi_b_eval = phi_x.evaluate(b)
-        
         phi_b = field.polynom(Fr,[phi_b_eval])
         x_minus_b = field.polynom(Fr,[Fr.one(),-b])
-        #print 'x_minus_b ', x_minus_b
-        #print '(phi_x-phi_b )', (phi_x-phi_b)
         psi_x, rem1 = (phi_x-phi_b)/x_minus_b
         
-        phiprime_b_eval = phiprime_x.evaluate(b)#
-        #print 'phiprime_b_eval', phiprime_b_eval<order
+        phiprime_b_eval = phiprime_x.evaluate(b)
         phiprime_b = field.polynom(Fr,[phiprime_b_eval])
         psiprime_x, rem2 = (phiprime_x-phiprime_b)/x_minus_b
-        
-        '''
-        print 'psi_x ',psi_x
-        print 'psiprime_x ',psiprime_x
-        print 'rem1 ',rem1
-        print 'rem2 ',rem2
-        '''
-        
+                
         assert rem1.iszero()
         assert rem2.iszero()
         
-        '''
-        L = [Fr.zero()]+psi_x.coef
-        psi_x = field.polynom(Fr,L)
-        K = [Fr.zero()]+psiprime_x.coef
-        psiprime_x = field.polynom(Fr,K)
-        
-        
-        for i in range(self.deg_pol+1):
-            #w_b = w_b + (psi_x.coef[i].val%order)*self.gVec[i] + (psiprime_x.coef[i].val%order)*self.hVec[i]
-            w_b = w_b + (psi_x.coef[i].val)*self.gVec[i] + (psiprime_x.coef[i].val)*self.hVec[i]
-        '''
         w_b, psiprime_x = self.commit(psi_x,psiprime_x)
             
         return b, phi_b_eval, phiprime_b_eval, w_b
     
-    def verifyEval(self, c,b,phi_b,phiprime_b,w_b):
+    def verifyEval(self, com, b, phi_b, phiprime_b, w_b):
         '''
-        Check if c is a commitment on a polynomial phi such that (b,phi_b) belongs
+        Check if com is a commitment on a polynomial phi such that (b,phi_b) belongs
         to the polynomial. The verification uses the witness w_b and the evaluation
         of the polynomial phiprime at b.
         Return True if the verification succeeds.
         This method computes 3 pairings.
         '''
-        
-        #order = self.pairing.r
         
         e = oEC.OptimAtePairing
         Pair = self.pairing
@@ -230,9 +209,9 @@ class PCommitment_Public_Key(fingexp.FingExp):
         t1 = gp_alpha-gprime_b
         u1 = (phi_b.val)*g + (phiprime_b.val)*h
         
-        return e(c,gp,Pair) == e(w_b,t1,Pair)*e(u1,gp,Pair)
+        return e(com.c,gp,Pair) == e(w_b.c,t1,Pair)*e(u1,gp,Pair)
         
-    def createWitnessBatch(self,phi_x,phiprime_x,B):
+    def createWitnessBatch(self, phi_x, phiprime_x, B):
         '''
         Return a witness w_b for the list of points (b_j,phi(b_j)) where b_j in 
         the list B to prove latter that each phi(b_j) is the evaluation of phi on b_j
@@ -251,11 +230,11 @@ class PCommitment_Public_Key(fingexp.FingExp):
             
         return B, rem1_x, rem2_x, w_B
     
-    def verifyEvalBatch(self,c, B, rem1_x, rem2_x, w_B):
+    def verifyEvalBatch(self, com, B, rem1_x, rem2_x, w_B):
         '''
-        Check if c is a commitment on a polynomial phi such that (b_j,phi_b_j) belongs
+        Check if com is a commitment on a polynomial phi such that (b_j,phi_b_j) belongs
         to the polynomial for each b_j in B. The verification uses the witness w_B 
-        and the remainder polynomial Rx_1,Rx_2 (see self.createWitnessBatch(...)
+        and the remainder polynomial rem1_x, rem2_x (see self.createWitnessBatch(...)
         for their construction).
         Return True if the verification succeeds.
         This method computes 3 pairings.
@@ -272,6 +251,13 @@ class PCommitment_Public_Key(fingexp.FingExp):
             x_minus_b_j = field.polynom(Fr,[Fr.one(),-b_j])
             prod_x_minus_b_j *= x_minus_b_j
             
+        if len(prod_x_minus_b_j.coef) < self.deg_pol+1 :
+            # Append zeros coef to phi_x if its coef list is too short (< deg_pol+1)
+            diff = self.deg_pol+1 - len(prod_x_minus_b_j.coef)
+            L = [Fr.zero()]*diff
+            new_prod_x_minus_b_j = field.polynom(Fr,L+prod_x_minus_b_j.coef)
+            prod_x_minus_b_j = new_prod_x_minus_b_j
+            
         t1 = EFp2.infty
         for i in range(self.deg_pol+1):
             t1 +=  prod_x_minus_b_j.coef[i].val*self.gprimeVec[i]
@@ -279,23 +265,67 @@ class PCommitment_Public_Key(fingexp.FingExp):
         
         u1 , rem2_x = self.commit(rem1_x,rem2_x) 
         
-        return e(c,gp,Pair) == e(w_B,t1,Pair)*e(u1,gp,Pair)
+        return e(com.c,gp,Pair) == e(w_B.c,t1,Pair)*e(u1.c,gp,Pair)
 
         
-    def queryZKS(self,c,b):
+    def queryZKS(self, com, b):
         '''
         Returns a non-interactive zero-knowledge proof of knowledge that phi(b)
-        = 0 or phi(b) != 0 where phi is the polynomial commited to in c.
+        = 0 or phi(b) != 0 where phi is the polynomial commited to in com.
         '''
         return None
         
-    def verifyZKS(self,c,b,proof):
+    def verifyZKS(self, com, b, proof):
         '''
         Checks that the NIZKPoK holds meaning that phi(b) = 0 or phi(b) != 0 
-        where phi is the polynomial commited to in c.
+        where phi is the polynomial commited to in com.
         '''
         return None
         
+        
+    def commitPhoneNode(self, G, phoneNumber, listOfOutgoingCalls, phiprime_x = None):
+        '''
+        Commit to a phoneNumber by creating a commitment on a list of messages 
+        listOfOutgoingCalls using self.commit_messages(listOfOutgoingCalls,phiprime_x)
+        and then appending phoneNumber*G to the commitment, wher G is a generator
+        '''
+        
+        phi_x, C = self.commit_messages(listOfOutgoingCalls,phiprime_x)
+        com, phiprime_x = C
+        
+        return PolynomialCommitment(phoneNumber.val*G + com.c,self) , phi_x, phiprime_x
+        
+    def verifyPolyPhoneNumber(self, G, phoneNumber, com, phi_x, phiprime_x):
+        '''
+        Check that the commitment com is indeed a commitment on phoneNumber,
+        phi_x and phiprime_x
+        return True if it is the case
+        '''
+        n_com = PolynomialCommitment(com.c-phoneNumber.val*G,self)
+        return self.verifyPoly(n_com,phi_x,phiprime_x)
+        
+    def verifyEvalPhoneNumber(self, G, phoneNumber, com, b, phi_b, phiprime_b, w_b):
+        '''
+        Check if com is a commitment on phoneNumber and on a polynomial phi such 
+        that (b,phi_b) belongs to the polynomial. The verification uses the 
+        witness w_b and the evaluation of the polynomial phiprime at b.
+        Return True if the verification succeeds.
+        This method computes 3 pairings.
+        '''
+        n_com = PolynomialCommitment(com.c-phoneNumber.val*G,self)
+        return self.verifyEval(n_com,b,phi_b,phiprime_b,w_b)
+        
+    def verifyEvalBatchPhoneNumber(self, G, phoneNumber, com, B, rem1_x, rem2_x, w_B):
+        '''
+        Check if com is a commitment on a polynomial phi such that (b_j,phi_b_j) belongs
+        to the polynomial for each b_j in B. The verification uses the witness w_B 
+        and the remainder polynomial rem1_x, rem2_x (see self.createWitnessBatch(...)
+        for their construction).
+        Return True if the verification succeeds.
+        This method computes 3 pairings.
+        '''
+        n_com = PolynomialCommitment(com.c-phoneNumber.val*G,self)
+        return self.verifyEvalBatch(n_com, B, rem1_x, rem2_x, w_B)
 
 class PolynomialCommitment:
     
