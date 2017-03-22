@@ -83,7 +83,28 @@ class PCommitment_Public_Key(fingexp.FingExp):
         gprimeVec.reverse()
         self.gVec = gVec
         self.hVec = hVec
-        self.gprimeVec = gprimeVec            
+        self.gprimeVec = gprimeVec
+        
+    def hashf(self,L):
+        ''' Return a number in Zr computed from a list L of elements
+            Assuming that all elements of the list has a fingerprint
+        '''
+        order = self.pairing.r
+        f = fingexp.fingerprint(L)
+        z = utils.b64tompz(f)%order
+        return z
+
+
+    def randomPolynomial(self):
+        '''
+        Return a random polynomial of degree self.deg_pol
+        '''
+        Fr = self.Fr
+        L = []
+        for i in range(self.deg_pol+1):
+            L.append(Fr.random())
+            
+        return field.polynom(Fr,L)
     
     def commit(self,phi_x,phiprime_x= None):
         '''
@@ -103,11 +124,7 @@ class PCommitment_Public_Key(fingexp.FingExp):
             phi_x = new_phi_x
         
         if phiprime_x == None :
-            L = []
-            for i in range(self.deg_pol+1):
-                L.append(Fr.random())
-            
-            phiprime_x = field.polynom(Fr,L)
+            phiprime_x = self.randomPolynomial()
             
         if len(phiprime_x.coef) < self.deg_pol+1 :
             # Append zeros coef to phiprime_x if its coef list is too short (< deg_pol+1)
@@ -268,19 +285,59 @@ class PCommitment_Public_Key(fingexp.FingExp):
         return e(com.c,gp,Pair) == e(w_B.c,t1,Pair)*e(u1.c,gp,Pair)
 
         
-    def queryZKS(self, com, b):
+    def queryZKS(self, com, phi_x, phiprime_x, b, b_is_root_of_phi_x, khi_x = None, khiprime_x = None):
         '''
         Returns a non-interactive zero-knowledge proof of knowledge that phi(b)
         = 0 or phi(b) != 0 where phi is the polynomial commited to in com.
         '''
-        return None
+        b, phi_b_eval, phiprime_b_eval, w_b = self.createWitness(phi_x,phiprime_x,b)
+        if b_is_root_of_phi_x :
+            assert phi_b_eval.iszero()
+            return b, w_b, phiprime_b_eval, None
+        else :
+            z_j = phi_b_eval.val*self.gVec[-1] + phiprime_b_eval.val*self.hVec[-1]
+            proof_z_j = self.openingNIZKPOK(com,phi_x,phiprime_x,khi_x,khiprime_x)
+            return b, w_b, None, (z_j, proof_z_j)
+        
+    def openingNIZKPOK(self, com, phi_x, phiprime_x, khi_x = None, khiprime_x = None):
+        if khi_x == None :
+            khi_x = self.randomPolynomial()
+        binding, khiprime_x = self.commit(khi_x,khiprime_x)
+        challenge = self.hashf([self,com,binding])
+        res_1 = khi_x + challenge*phi_x
+        res_2 = khiprime_x + challenge*phiprime_x
+        
+        return challenge, res_1, res_2
+        
+    def checkOpeningNIZKPOK(self,com,proof):
+        challenge, res_1, res_2 = proof
+        A, res_2 = self.commit(res_1,res_2)
+        bind_c = A.c-challenge*com.c
+        binding = PolynomialCommitment(bind_c,self)
+        
+        return challenge == self.hashf([self,com,binding])
         
     def verifyZKS(self, com, b, proof):
         '''
         Checks that the NIZKPoK holds meaning that phi(b) = 0 or phi(b) != 0 
         where phi is the polynomial commited to in com.
         '''
-        return None
+        e = oEC.OptimAtePairing
+        Pair = self.pairing
+        gp = self.gprimeVec[-1]
+        bp, w_b, phiprime_b_eval, A = proof
+        z_j, proof_z_j = A
+        
+        if proof_z_j == None :
+            return self.verifyEval(com, b, 0, phiprime_b_eval, w_b)
+        elif phiprime_b_eval == None :
+            cond1 = self.checkOpeningNIZKPOK(com,proof_z_j)
+            gprime_b = b*gp
+            gprime_alpha_minus_b = self.gprimeVec[-2]-gprime_b
+            cond2 = e(com.c,gp,Pair) == e(w_b.c,gprime_alpha_minus_b,Pair)*e(z_j,gp,Pair)
+            return cond1 and cond2
+        else :
+            return False
         
         
     def commitPhoneNode(self, G, phoneNumber, listOfOutgoingCalls, phiprime_x = None):
@@ -327,7 +384,7 @@ class PCommitment_Public_Key(fingexp.FingExp):
         n_com = PolynomialCommitment(com.c-phoneNumber.val*G,self)
         return self.verifyEvalBatch(n_com, B, rem1_x, rem2_x, w_B)
 
-class PolynomialCommitment:
+class PolynomialCommitment(fingexp.FingExp):
     
     def __init__(self,c,PCom_PK):
         self.c = c
@@ -335,6 +392,10 @@ class PolynomialCommitment:
 
         self.to_fingerprint = ["PCom_PK","c"]
         self.to_export = {"fingerprint": [],"value": ["PCom_PK","c"]}
+        
+    def load(self, data, fingerprints):
+        self.c = utils.b64tompz(data["c"])
+        self.PCom_PK = utils.b64tompz(data["PCom_PK"])
 
     def __eq__(self,other):
         if not isinstance(other,PolynomialCommitment):

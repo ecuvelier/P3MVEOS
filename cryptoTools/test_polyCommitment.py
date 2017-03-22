@@ -65,7 +65,8 @@ class TestPolyCommitment(unittest.TestCase):
         self.assertTrue(self.pC_PK.verifyPoly(com,phi_x,phiprime_x))
         
     def test_commitment_and_verify_without_chosing_randomness(self):
-        phi_x = self.produce_polynomial()
+        #phi_x = self.produce_polynomial()
+        phi_x = self.pC_PK.randomPolynomial()
         
         com,phiprime_x = self.pC_PK.commit(phi_x)
         self.assertTrue(self.pC_PK.verifyPoly(com,phi_x,phiprime_x))
@@ -148,6 +149,14 @@ class TestPolyCommitment(unittest.TestCase):
         B, rem1_x, rem2_x, w_B = self.pC_PK.createWitnessBatch( phi_x, phiprime_x, B)
         
         self.assertTrue(self.pC_PK.verifyEvalBatchPhoneNumber( G, phoneList[0], com, B, rem1_x, rem2_x, w_B))
+        
+    def test_openingNIZKPOK(self):
+        phi_x = self.produce_polynomial()
+        com,phiprime_x = self.pC_PK.commit(phi_x)
+        
+        proof = self.pC_PK.openingNIZKPOK(com,phi_x,phiprime_x)
+        
+        self.assertTrue(self.pC_PK.checkOpeningNIZKPOK(com,proof))
 
 suite = unittest.TestLoader().loadTestsFromTestCase(TestPolyCommitment)
 unittest.TextTestRunner(verbosity=2).run(suite)
