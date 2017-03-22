@@ -103,10 +103,16 @@ class TestPolyCommitment(unittest.TestCase):
         phi_x = self.produce_polynomial()
         com,phiprime_x = self.pC_PK.commit(phi_x)
         
+        khi_x = self.produce_polynomial()
+        com2, khiprime_x = self.pC_PK.commit(khi_x)
+        
         b = Fr.random()
         b,phi_b,phiprime_b,w_b = self.pC_PK.createWitness(phi_x,phiprime_x,b)
         
         self.assertTrue(self.pC_PK.verifyEval(com,b,phi_b,phiprime_b,w_b))
+        
+        b,khi_b,khiprime_b,wk_b = self.pC_PK.createWitness(khi_x,khiprime_x,b)
+        self.assertFalse(self.pC_PK.verifyEval(com,b,khi_b,khiprime_b,wk_b))
         
         
     def test_verification_of_batch_evaluation_of_polynomial_using_a_witness(self):
@@ -154,9 +160,33 @@ class TestPolyCommitment(unittest.TestCase):
         phi_x = self.produce_polynomial()
         com,phiprime_x = self.pC_PK.commit(phi_x)
         
+        khi_x = self.produce_polynomial()
+        com2, khiprime_x = self.pC_PK.commit(khi_x)
+        
         proof = self.pC_PK.openingNIZKPOK(com,phi_x,phiprime_x)
+        proof2 = self.pC_PK.openingNIZKPOK(com2,khi_x,khiprime_x)
         
         self.assertTrue(self.pC_PK.checkOpeningNIZKPOK(com,proof))
+        self.assertFalse(self.pC_PK.checkOpeningNIZKPOK(com,proof2))
+        
+    def test_ZKSProof(self):
+        
+        mList = self.produce_messages()
+        phi_x,D = self.pC_PK.commit_messages(mList)
+        com, phiprime_x = D
+        
+        m_in_list = sample(mList,1)[0]
+        m_not_in_list = Fr.random()
+        while m_not_in_list in mList :
+            m_not_in_list = Fr.random()
+            
+        proof1 = self.pC_PK.queryZKS(com, phi_x, phiprime_x, m_in_list, True)
+        proof2 = self.pC_PK.queryZKS(com, phi_x, phiprime_x, m_not_in_list, False)
+        
+        self.assertTrue(self.pC_PK.verifyZKS(com,m_in_list,proof1))
+        self.assertTrue(self.pC_PK.verifyZKS(com,m_not_in_list,proof2))
+            
+        
 
 suite = unittest.TestLoader().loadTestsFromTestCase(TestPolyCommitment)
 unittest.TextTestRunner(verbosity=2).run(suite)

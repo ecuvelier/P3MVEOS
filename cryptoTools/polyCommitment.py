@@ -322,17 +322,18 @@ class PCommitment_Public_Key(fingexp.FingExp):
         Checks that the NIZKPoK holds meaning that phi(b) = 0 or phi(b) != 0 
         where phi is the polynomial commited to in com.
         '''
+        Fr = self.Fr
         e = oEC.OptimAtePairing
         Pair = self.pairing
         gp = self.gprimeVec[-1]
         bp, w_b, phiprime_b_eval, A = proof
-        z_j, proof_z_j = A
         
-        if proof_z_j == None :
-            return self.verifyEval(com, b, 0, phiprime_b_eval, w_b)
+        if A == None :
+            return self.verifyEval(com, b, Fr.zero(), phiprime_b_eval, w_b)
         elif phiprime_b_eval == None :
+            z_j, proof_z_j = A
             cond1 = self.checkOpeningNIZKPOK(com,proof_z_j)
-            gprime_b = b*gp
+            gprime_b = b.val*gp
             gprime_alpha_minus_b = self.gprimeVec[-2]-gprime_b
             cond2 = e(com.c,gp,Pair) == e(w_b.c,gprime_alpha_minus_b,Pair)*e(z_j,gp,Pair)
             return cond1 and cond2
