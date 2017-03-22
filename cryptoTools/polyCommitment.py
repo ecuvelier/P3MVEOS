@@ -339,7 +339,39 @@ class PCommitment_Public_Key(fingexp.FingExp):
             return cond1 and cond2
         else :
             return False
+
+class PCommitment_Secret_Key(fingexp.FingExp):
+    
+    def __init__(self,alpha):
+        self.alpha = alpha
         
+        self.to_fingerprint = ["alpha"]
+        self.to_export = {"fingerprint": [],"value": ["alpha"]}
+
+    def load(self, data, fingerprints):
+        self.alpha = utils.b64tompz(data["alpha"])
+        
+    def __str__(self):
+        return "Secret Key for Polynomial Commitment: "+str(self.alpha)
+
+class Phone_Number_Commitment_Public_Key(fingexp.FingExp):
+    
+    def __init__(self,PCommitment_PublicKey):
+        self.PC_PK= PCommitment_PublicKey
+        assert isinstance(self.PC_PK,PCommitment_Public_Key) 
+        
+        self.to_fingerprint = ["PC_PK"]
+        self.to_export = {"fingerprint": [],"value": ["PC_PK"]}
+
+    def load(self, data, fingerprints):
+        self.PC_PK = utils.b64tompz(data["PC_PK"])
+     
+    def __eq__(self, other):
+       return (self.PC_PK == other.PC_PK)
+
+    def __str__(self):
+        return "Public Key for Phone Number Commitment using:\n\t "+str(self.PC_PK)
+       
         
     def commitPhoneNode(self, G, phoneNumber, listOfOutgoingCalls, phiprime_x = None):
         '''
@@ -348,10 +380,10 @@ class PCommitment_Public_Key(fingexp.FingExp):
         and then appending phoneNumber*G to the commitment, wher G is a generator
         '''
         
-        phi_x, C = self.commit_messages(listOfOutgoingCalls,phiprime_x)
+        phi_x, C = self.PC_PK.commit_messages(listOfOutgoingCalls,phiprime_x)
         com, phiprime_x = C
         
-        return PolynomialCommitment(phoneNumber.val*G + com.c,self) , phi_x, phiprime_x
+        return PolynomialCommitment(phoneNumber.val*G + com.c,self.PC_PK) , phi_x, phiprime_x
         
     def verifyPolyPhoneNumber(self, G, phoneNumber, com, phi_x, phiprime_x):
         '''
@@ -359,8 +391,8 @@ class PCommitment_Public_Key(fingexp.FingExp):
         phi_x and phiprime_x
         return True if it is the case
         '''
-        n_com = PolynomialCommitment(com.c-phoneNumber.val*G,self)
-        return self.verifyPoly(n_com,phi_x,phiprime_x)
+        n_com = PolynomialCommitment(com.c-phoneNumber.val*G,self.PC_PK)
+        return self.PC_PK.verifyPoly(n_com,phi_x,phiprime_x)
         
     def verifyEvalPhoneNumber(self, G, phoneNumber, com, b, phi_b, phiprime_b, w_b):
         '''
@@ -370,8 +402,8 @@ class PCommitment_Public_Key(fingexp.FingExp):
         Return True if the verification succeeds.
         This method computes 3 pairings.
         '''
-        n_com = PolynomialCommitment(com.c-phoneNumber.val*G,self)
-        return self.verifyEval(n_com,b,phi_b,phiprime_b,w_b)
+        n_com = PolynomialCommitment(com.c-phoneNumber.val*G,self.PC_PK)
+        return self.PC_PK.verifyEval(n_com,b,phi_b,phiprime_b,w_b)
         
     def verifyEvalBatchPhoneNumber(self, G, phoneNumber, com, B, rem1_x, rem2_x, w_B):
         '''
@@ -382,8 +414,24 @@ class PCommitment_Public_Key(fingexp.FingExp):
         Return True if the verification succeeds.
         This method computes 3 pairings.
         '''
-        n_com = PolynomialCommitment(com.c-phoneNumber.val*G,self)
-        return self.verifyEvalBatch(n_com, B, rem1_x, rem2_x, w_B)
+        n_com = PolynomialCommitment(com.c-phoneNumber.val*G,self.PC_PK)
+        return self.PC_PK.verifyEvalBatch(n_com, B, rem1_x, rem2_x, w_B)
+        
+    def queryZKSPhoneNumber(self, G, phoneNumber,com, phi_x, phiprime_x, b, b_is_root_of_phi_x, khi_x = None, khiprime_x = None):
+        '''
+        Returns a non-interactive zero-knowledge proof of knowledge that phi(b)
+        = 0 or phi(b) != 0 where phi is the polynomial commited to in com.
+        '''
+        n_com = PolynomialCommitment(com.c-phoneNumber.val*G,self.PC_PK)
+        return self.PC_PK.queryZKS(n_com, phi_x, phiprime_x, b, b_is_root_of_phi_x)
+        
+    def verifyZKSPhoneNumber(self, G, phoneNumber, com, b, proof):
+        '''
+        Checks that the NIZKPoK holds meaning that phi(b) = 0 or phi(b) != 0 
+        where phi is the polynomial commited to in com.
+        '''
+        n_com = PolynomialCommitment(com.c-phoneNumber.val*G,self.PC_PK)
+        return self.PC_PK.verifyZKS(n_com, b, proof)
 
 class PolynomialCommitment(fingexp.FingExp):
     
