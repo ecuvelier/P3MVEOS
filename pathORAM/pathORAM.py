@@ -11,6 +11,16 @@ email : firstname.lastname@uclouvain.be
 class PathORAMTree :
     
     def __init__(self,root,bucketList,Z,nbChildren,depth,treeHash,treeID=''):
+        '''
+        - root, the root of the tree
+        - bucketList is the list of all the nodes of the tree
+        - Z is the exact size of the bucket
+        - nbChildren is the exact number of children a node must have except for 
+        the leaf nodes which have none and their parents which have only one
+        - depth is the number of level of the tree
+        - treeHash is the Merkle-Damgard hash of the tree
+        - treeID is a string used to identify the tree
+        '''
         self.root = root
         self.bucketList = bucketList
         self.Z = Z # exact number of blocks in each bucket
@@ -27,7 +37,9 @@ class PathORAMTree :
         
     def setup(self,fillingBlockMethod):
         '''
-        Build the PO tree
+        Build the PO tree by filling each node of the tree by buckets and by
+        filling each bucket with self.Z blocks where a block is constructed using
+        the fillingBlockMethod argument
         '''
         L = []
         for i in range(self.Z):
@@ -76,9 +88,17 @@ class PathORAMBucket :
     
     def __init__(self,POTree,parent,children,blockList, position, subTreeHash=None, isRoot=False,isLeaf=False):
         '''
-        position is a pair of int (x,y) where 
+        - POTree is the Path ORAM tree in which the bucket is
+        - parent is the parent node of the bucket
+        - children is a list containing the children nodes of bucket
+        - blockList is a list containing the blocks stored in the bucket its size
+        is exaclty POTree.Z
+        - position is a pair of int (x,y) where 
             - x is the level of the bucket
-            - y is the (unique) order among the other siblings 
+            - y is the (unique) order among the other siblings
+        - subTreeHash is the hash of the sub tree of which bucket is the root
+        - isRoot is a boolean whose meaning is obvious
+        - isLeaf is a boolean whose meaning is obvious
         '''
         self.POTree = POTree
         self.parent = parent
@@ -113,15 +133,46 @@ class PathORAMBucket :
         
     def merkleDamgardHash(self):
         return None
+        
+class PathORAM :
     
-    
-class PathORAMBlock :
-    
-    def __init__(self,element):
-        self.element = element
-    
-    
-class PathORAMPositionMap :
-    
-    def __init__(self,positionDic):
-        self.positionDic = positionDic
+    def __init__(self,POTree, positionDic, clientStash):
+        '''
+        - POTree is the Path ORAM tree in which the data will be stored
+        - positionDic is a dictionnary used to store the position in which a block
+        is currently stored, an item of the dictionnary is of the form 
+        {blockID : (path,bucketID,blockOrder)}
+        - clientStash is a list of pair (path,block) where path is the path on 
+        which block must be stored 
+        '''
+        self.POTree = POTree
+        self.positionDic = positionDic # store entries of the form {blockID : (path,bucketID,blockOrder)}
+        self.clientStash = clientStash
+        self.pathList = self.buildPathList()
+        
+    def buildPathList(self):
+        '''
+        this method returns an iterable of the path of self.POTree
+        A path is a string of the form '025103...40' where a letter x at index i 
+        indicates that the child x of the previous node of level i-1 is in the
+        path. The first letter is 0, for the root and the last is always 0 for a
+        leaf.
+        '''
+        return None
+        
+    def queryBlock(self,blockID):
+        '''
+        This method returns a block whose Id is blockID. Doing so, the method 
+        changes all the buckets (and blocks) that are on the path of the block.
+        Also the self.clientStash is modified at the end of the execution. 
+        '''
+        return None
+        
+    def fillupStash(blockList):
+        '''
+        Given a blockList, this method fills up the self.clientStash and attributes
+        uniformly randomly a path to each block.
+        '''
+        pass
+        
+        
