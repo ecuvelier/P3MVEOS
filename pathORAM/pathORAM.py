@@ -8,6 +8,8 @@ Address : Place du Levant 3, 1348 Louvain-la-Neuve, BELGIUM
 email : firstname.lastname@uclouvain.be
 """
 
+from Crypto.Random.random import randint
+
 class PathORAMTree :
     
     def __init__(self,root,bucketList,Z,nbChildren,depth,treeHash,treeID=''):
@@ -45,14 +47,14 @@ class PathORAMTree :
         for i in range(self.Z):
             L.append(fillingBlockMethod)
             
-        root = PathORAMBucket(self,None,[],L,(0,1),isRoot=True)
+        root = PathORAMBucket(self,None,[],L,(0,0),isRoot=True)
         
         self.root = root
         self.bucketList.append(self.root)
         
         def createChildren(bucket, depth):
             if depth == 0 :
-                leaf = PathORAMBucket(self,bucket,[],[],(bucket.position[0]+1,1),isLeaf=True)
+                leaf = PathORAMBucket(self,bucket,[],[],(bucket.position[0]+1,0),isLeaf=True)
                 bucket.children = [leaf]
                 self.bucketList.append(leaf)
                 
@@ -136,18 +138,23 @@ class PathORAMBucket :
         
 class PathORAM :
     
-    def __init__(self,POTree, positionDic, clientStash):
+    def __init__(self,POTree):
         '''
         - POTree is the Path ORAM tree in which the data will be stored
+        
+        The ethod initialize the folowing variables:
         - positionDic is a dictionnary used to store the position in which a block
         is currently stored, an item of the dictionnary is of the form 
-        {blockID : (path,bucketID,blockOrder)}
-        - clientStash is a list of pair (path,block) where path is the path on 
-        which block must be stored 
+        {bucketID : [(blockID,path),...,] of size Z} ; bucketID is set to 'stash', when the 
+        block is stored in the client Stash, in this cas blockID is set to None
+        - positionMap is a dictionary of the form {blockID : (bucketID,path)}
+        - clientStash is a dictionary { blockID : block } where 
+        path is the path on which some blocks must be stored 
         '''
         self.POTree = POTree
-        self.positionDic = positionDic # store entries of the form {blockID : (path,bucketID,blockOrder)}
-        self.clientStash = clientStash
+        self.positionDic = {} # stores entries of the form {bucketID : [(blockID,path),...,] of size Z}
+        self.positionMap = {} # stores entires of the form {blockID : (bucketID,path)}
+        self.clientStash = {} # stores entires of the form {blockID : block }
         self.pathList = self.buildPathList()
         
     def buildPathList(self):
@@ -158,7 +165,46 @@ class PathORAM :
         path. The first letter is 0, for the root and the last is always 0 for a
         leaf.
         '''
-        return None
+        
+        def genWords(alphabet,length):
+            '''
+            alphabet is a list of string
+            '''
+            if length == 1 :
+                return alphabet
+            else :
+                new_words = []
+                words = genWords(alphabet,length-1)
+                for word in words :
+                    for letter in alphabet :
+                        new_words.append(letter+word)
+                        
+                return new_words
+                       
+        alphabet  = []
+        for i in range(self.POTree.nbChildren):
+            alphabet.append(str(i))
+        
+    def fillupStash(self,blockList):
+        '''
+        Given a blockList (of the form blockId, block = blockList[i]), this
+        method fills up the self.clientStash and attributes uniformly randomly 
+        a path to each block. The method also sets up the self.positionDic
+        '''
+        n = len(self.pathList)
+        
+        assert not 'stash' in self.positionDic
+        self.positionDic['stash'] = []
+        
+        for i in range(blockList):
+            blockID, block = blockList[i]
+            r = randint(0,n-1)
+            path = self.pathList[r]
+            
+            self.positionDic['stash'].append(blockID,path)
+            self.positionMap[blockID] = (None,path)
+            self.clientStash[blockID] = block
+        
         
     def queryBlock(self,blockID):
         '''
@@ -166,13 +212,55 @@ class PathORAM :
         changes all the buckets (and blocks) that are on the path of the block.
         Also the self.clientStash is modified at the end of the execution. 
         '''
-        return None
+        bucketID,path = self.positionMap[blockID] 
         
-    def fillupStash(blockList):
-        '''
-        Given a blockList, this method fills up the self.clientStash and attributes
-        uniformly randomly a path to each block.
-        '''
-        pass
+        if bucketID == 'stash':
+            # the block is stored in the stash
+            queriedBlock = self.clientStash[blockID]
+            for i in range(len(self.positionDic['stash'])):
+                if self.positionDic['stash'][i][0] == blockID :
+                    blockOrder = i
+                    break
+        
+        node = self.POTree.root
+        path_copy = path
+        bucketList = []
+        while path_copy != '' :
+            a = path_copy[0]
+            child = node.children[int(a)]
+            
+            for i in range(self.POTree.Z) :
+                if bucketID == child.idNumber and blockID == self.positionDic[bucketID][i][0]:
+                    blockOrder = i
+                    queriedBlock = child.blockList[blockOrder]
+                        
+                block_i = child.blockList[i]
+                block_i_ID = self.positionDic[bucketID][i][0]
+                block_i_path = self.positionDic[bucketID][i][1]
+                    
+                self.clientStash[block_i_ID] = block_i
+                self.positionDic['stash'].append(block_i_ID,block_i_path)
+                self.positionMap[block_i_ID] = ('stash',block_i_path)
+            
+            bucketList = [child] +bucketList
+            path_copy = path_copy[1:]
+            
+            
+        n = len(self.pathList)
+        r = randint(0,n-1)
+        new_path = self.pathList[r]
+        self.positionMap[blockID] = (bucketID,new_path)
+        self.positionDic[bucketID][blockOrder] = (blockID,new_path)
+        
+        for node in bucketList :
+            nodeID = node.idNumber
+            pass
+                
+
+                
+        
+        return queriedBlock
+        
+    
         
         
