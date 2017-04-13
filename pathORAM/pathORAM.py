@@ -9,10 +9,11 @@ email : firstname.lastname@uclouvain.be
 """
 
 from Crypto.Random.random import randint
+from random import sample
 
 class PathORAMTree :
     
-    def __init__(self,root,bucketList,Z,nbChildren,depth,treeHash,treeID=''):
+    def __init__(self,root = None, bucketList = [], Z = 4, nbChildren = 2 ,depth = 10, treeHash = '', treeID=''):
         '''
         - root, the root of the tree
         - bucketList is the list of all the nodes of the tree
@@ -45,7 +46,7 @@ class PathORAMTree :
         '''
         L = []
         for i in range(self.Z):
-            L.append(fillingBlockMethod)
+            L.append(fillingBlockMethod())
             
         root = PathORAMBucket(self,None,[],L,(0,0),isRoot=True)
         
@@ -63,7 +64,7 @@ class PathORAMTree :
                 for i in range(self.nbChildren):
                     L = []
                     for j in range(self.Z):
-                        L.append(fillingBlockMethod)
+                        L.append(fillingBlockMethod())
                         
                     childrenList.append(PathORAMBucket(self,bucket,[],L,(bucket.position[0]+1,i)))
                     
@@ -126,9 +127,12 @@ class PathORAMBucket :
             
     def __str__(self):
         if self.isRoot :
-            return 'Root Bucket of the Path ORAM tree'
+            return 'Root Bucket of the PO tree '+self.POTree.treeID
+            
+        elif self.isLeaf :
+            return 'Leaf Bucket '+str(self.idNumber) +' of the PO tree '+self.POTree.treeID
         else :
-            return 'Path ORAM Bucket with id '+str(self.idNumber) +' of the Path ORAM tree '+self.POTree.root.treeID
+            return 'PO Bucket '+str(self.idNumber) +' of the PO tree '+self.POTree.treeID
         
     def __repr__(self):
         return self.__str__()
@@ -138,7 +142,7 @@ class PathORAMBucket :
         
 class PathORAM :
     
-    def __init__(self,POTree):
+    def __init__(self,POTree, creatDummyBlock = None, rerandomizeBlock = None):
         '''
         - POTree is the Path ORAM tree in which the data will be stored
         
@@ -152,10 +156,30 @@ class PathORAM :
         path is the path on which some blocks must be stored 
         '''
         self.POTree = POTree
-        self.positionDic = {} # stores entries of the form {bucketID : [(blockID,path),...,] of size Z}
+        self.positionDic = {'stash':[]} # stores entries of the form {bucketID : [(blockID,path),...,] of size Z}
         self.positionMap = {} # stores entires of the form {blockID : (bucketID,path)}
         self.clientStash = {} # stores entires of the form {blockID : block }
         self.pathList = self.buildPathList()
+        
+        for node in self.POTree.bucketList : # follow the path from leaf to root
+            nodeID = node.idNumber
+            if not len(nodeID) ==  self.POTree.depth + 2 :
+                # is not a leaf
+                self.positionDic[nodeID] = [('','')]*self.POTree.Z
+        
+        if creatDummyBlock == None :
+            def f():
+                return 0
+            self.createDummyBlock = f
+        else :
+            self.createDummyBlock = creatDummyBlock
+            
+        if rerandomizeBlock == None :
+            def fb(block):
+                return ('rerand', block)
+            self.rerandomizeBlock = fb
+        else :
+            self.rerandomizeBlock = rerandomizeBlock
         
     def buildPathList(self):
         '''
@@ -184,6 +208,8 @@ class PathORAM :
         alphabet  = []
         for i in range(self.POTree.nbChildren):
             alphabet.append(str(i))
+            
+        return genWords(alphabet,self.POTree.depth)
         
     def fillupStash(self,blockList):
         '''
@@ -193,16 +219,16 @@ class PathORAM :
         '''
         n = len(self.pathList)
         
-        assert not 'stash' in self.positionDic
-        self.positionDic['stash'] = []
+        assert self.positionDic['stash'] == [] # Stash is not empty do not use this method!
+    
         
-        for i in range(blockList):
+        for i in range(len(blockList)):
             blockID, block = blockList[i]
             r = randint(0,n-1)
             path = self.pathList[r]
             
-            self.positionDic['stash'].append(blockID,path)
-            self.positionMap[blockID] = (None,path)
+            self.positionDic['stash'].append((blockID,path))
+            self.positionMap[blockID] = ('stash',path)
             self.clientStash[blockID] = block
         
         
@@ -210,8 +236,11 @@ class PathORAM :
         '''
         This method returns a block whose Id is blockID. Doing so, the method 
         changes all the buckets (and blocks) that are on the path of the block.
-        Also the self.clientStash is modified at the end of the execution. 
+        Also the self.clientStash, the self.positionDic and the self.positionMap
+        are modified at the end of the execution.
         '''
+        Z = self.POTree.Z        
+        
         bucketID,path = self.positionMap[blockID] 
         
         if bucketID == 'stash':
@@ -223,44 +252,115 @@ class PathORAM :
                     break
         
         node = self.POTree.root
+        
+        for i in range(Z) :
+            if bucketID == node.idNumber and blockID == self.positionDic[bucketID][i][0]:
+                blockOrder = i
+                queriedBlock = node.blockList[blockOrder]
+                
         path_copy = path
-        bucketList = []
+        bucketList = [node] # bucketList will be used afterwards to rewrite blocks into the tree
+        
         while path_copy != '' :
             a = path_copy[0]
             child = node.children[int(a)]
             
-            for i in range(self.POTree.Z) :
+            for i in range(Z) :
                 if bucketID == child.idNumber and blockID == self.positionDic[bucketID][i][0]:
                     blockOrder = i
                     queriedBlock = child.blockList[blockOrder]
                         
                 block_i = child.blockList[i]
-                block_i_ID = self.positionDic[bucketID][i][0]
-                block_i_path = self.positionDic[bucketID][i][1]
+                block_i_ID, block_i_path = self.positionDic[bucketID][i]
                     
-                self.clientStash[block_i_ID] = block_i
-                self.positionDic['stash'].append(block_i_ID,block_i_path)
-                self.positionMap[block_i_ID] = ('stash',block_i_path)
+                self.clientStash[block_i_ID] = block_i # add the block to the stash
+                self.positionDic['stash'].append((block_i_ID,block_i_path)) # update positionDic accordingly
+                self.positionMap[block_i_ID] = ('stash',block_i_path) # update positionMap accordingly
             
             bucketList = [child] +bucketList
-            path_copy = path_copy[1:]
+            path_copy = path_copy[1:] # remove first letter of path_copy
             
             
         n = len(self.pathList)
         r = randint(0,n-1)
-        new_path = self.pathList[r]
-        self.positionMap[blockID] = (bucketID,new_path)
-        self.positionDic[bucketID][blockOrder] = (blockID,new_path)
+        new_path = self.pathList[r] # Chose a new location for the querried block
+        self.positionMap[blockID] = (bucketID,new_path)  # update positionMap accordingly
+        self.positionDic[bucketID][blockOrder] = (blockID,new_path) # update positionDic accordingly
         
-        for node in bucketList :
-            nodeID = node.idNumber
-            pass
+        
+        def getCandidates(BuID):
+            '''
+            Check in the clientStash if there are candidates blocks that could be
+            stored in this bucket (with BuID identifier)
+            Return a list of candidates
+            '''
+            n = len(BuID)
+            candidatesList = []
+            L = self.positionDic['stash']
+            for bloID,path in L :
+                if path[:n] == BuID :
+                    candidatesList.append(bloID)
+            return candidatesList
+        
+        for bucket in bucketList : # follow the path from leaf to root
+            nodeID = bucket.idNumber
+            candidates = getCandidates(nodeID)
+            
+            if len(candidates)< Z :
+                for i in range(Z-len(candidates)):
+                    DB = self.createDummyBlock()
+                    candidates.append(DB)
+            
+            for i in range(Z):
+                # here we store the candidates blocks (previously stored in the stash) into the bucket
+                bloID = candidates[i]
+                buID, bloPath = self.positionMap[bloID]
+                assert buID == 'stash'
+                block = self.clientStash[bloID]
+                rerand_block = self.rerandomizeBlock(block) 
+                bucket.blockList[i] = rerand_block
                 
-
-                
+                # update the class variable accordingly of the new position of the block
+                self.clientStash.pop(bloID)
+                self.positionDic['stash'].remove((bloID,bloPath)) # remove it from the stash
+                self.positionDic[nodeID][i] = bloID,bloPath
+                self.positionMap[bloID] = nodeID, bloPath                
         
         return queriedBlock
         
+
+
+##################### Test Example #############################################
+
+def test_example():
     
+    # create PO Tree
+    po_tree = PathORAMTree(depth = 2, nbChildren = 2, treeID = 'test_PO_tree')
         
+    def fbm():
+        return randint(0,1000)
+    
+    po_tree.setup(fbm)
+    
+    #print po_tree
+    
+    PO = PathORAM(po_tree)
+    
+    L = ['ba','be','bi','bo','bu','ca','ce','ci','co','cu','da','de','di','do','du','fa','fe','fi','fo','fu','ga','ge','gi','go','gu','ha','he','hi','ho','hu','ja','je','ji','jo','ju','ka','ke','ki','ko','ku','la','le','li','lo','lu','ma','me','mi','mo','mu','na','ne','ni','no','nu','pa','pe','pi','po','pu','ra','re','ri','ro','ru','sa','se','si','so','su','ta','te','ti','to','tu','va','ve','vi','vo','vu','wa','we','wi','wo','wu','xa','xe','xi','xo','xu','za','ze','zi','zo','zu']
+    words  = []
+    for i in range(20):
+        word = ''
+        for j in range(3) :
+            syllab = sample(L,1)[0]
+            word += syllab
+        words.append((i,word))
         
+    #print words
+        
+    PO.fillupStash(words)
+    
+    print 'client Stash: ',PO.clientStash,'\n'
+    print 'position Map: ',PO.positionMap,'\n'
+    print 'position Dic: ',PO.positionDic,'\n'
+    
+    return PO
