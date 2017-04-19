@@ -169,7 +169,7 @@ class PathORAM :
         
         if creatDummyBlock == None :
             def f():
-                return 0
+                return 'dummy block'
             self.createDummyBlock = f
         else :
             self.createDummyBlock = creatDummyBlock
@@ -209,7 +209,11 @@ class PathORAM :
         for i in range(self.POTree.nbChildren):
             alphabet.append(str(i))
             
-        return genWords(alphabet,self.POTree.depth)
+        paths = genWords(alphabet,self.POTree.depth)
+        pathList = []
+        for path in paths :
+            pathList.append('0'+path)
+        return pathList
         
     def fillupStash(self,blockList):
         '''
@@ -239,54 +243,62 @@ class PathORAM :
         Also the self.clientStash, the self.positionDic and the self.positionMap
         are modified at the end of the execution.
         '''
-        Z = self.POTree.Z        
+        Z = self.POTree.Z
+        lstash0 = len(self.clientStash)
         
         bucketID,path = self.positionMap[blockID] 
+        
+        n = len(self.pathList)
+        r = randint(0,n-1)
+        new_path = self.pathList[r] # Chose a new location for the querried block
+        print 'Querrying block ', blockID, ' stored on path ', path, ', the block is reassigned to ',new_path
+        
         
         if bucketID == 'stash':
             # the block is stored in the stash
             queriedBlock = self.clientStash[blockID]
+            
             for i in range(len(self.positionDic['stash'])):
                 if self.positionDic['stash'][i][0] == blockID :
                     blockOrder = i
                     break
+                
+            self.positionDic['stash'][blockOrder] = (blockID,new_path) # update positionDic accordingly
+            self.positionMap[blockID] = ('stash',new_path)  # update positionMap accordingly
         
         node = self.POTree.root
+        path_copy = path[1:]+'0'
+        #print 'path ', path+'0'
+        bucketList = [] # bucketList will be used afterwards to rewrite blocks into the tree
         
-        for i in range(Z) :
-            if bucketID == node.idNumber and blockID == self.positionDic[bucketID][i][0]:
-                blockOrder = i
-                queriedBlock = node.blockList[blockOrder]
-                
-        path_copy = path
-        bucketList = [node] # bucketList will be used afterwards to rewrite blocks into the tree
-        
-        while path_copy != '' :
-            a = path_copy[0]
-            child = node.children[int(a)]
+        while not node.isLeaf :
             
             for i in range(Z) :
-                if bucketID == child.idNumber and blockID == self.positionDic[bucketID][i][0]:
-                    blockOrder = i
-                    queriedBlock = child.blockList[blockOrder]
+                
+                block_i = node.blockList[i]
+                block_i_ID, block_i_path = self.positionDic[node.idNumber][i]
+                
+                if (block_i_ID, block_i_path) != ('', '') :
+                    # the block i is not a dummy block
+                    assert not block_i_ID in self.clientStash
+                    self.clientStash[block_i_ID] = block_i # add the block to the stash
+                    if bucketID == node.idNumber and blockID == self.positionDic[bucketID][i][0]:
+                        # this is the block we seek (it is not stored in the stash)
+                        queriedBlock = node.blockList[i]
+                        self.positionDic['stash'].append((blockID,new_path)) # update positionDic accordingly
+                        self.positionMap[blockID] = ('stash',new_path)  # update positionMap accordingly
                         
-                block_i = child.blockList[i]
-                block_i_ID, block_i_path = self.positionDic[bucketID][i]
-                    
-                self.clientStash[block_i_ID] = block_i # add the block to the stash
-                self.positionDic['stash'].append((block_i_ID,block_i_path)) # update positionDic accordingly
-                self.positionMap[block_i_ID] = ('stash',block_i_path) # update positionMap accordingly
+                    else :
+                        self.positionDic['stash'].append((block_i_ID,block_i_path)) # update positionDic accordingly
+                        self.positionMap[block_i_ID] = ('stash',block_i_path) # update positionMap accordingly
             
-            bucketList = [child] +bucketList
+            bucketList = [node] +bucketList
+            
+            a = path_copy[0]
             path_copy = path_copy[1:] # remove first letter of path_copy
-            
-            
-        n = len(self.pathList)
-        r = randint(0,n-1)
-        new_path = self.pathList[r] # Chose a new location for the querried block
-        self.positionMap[blockID] = (bucketID,new_path)  # update positionMap accordingly
-        self.positionDic[bucketID][blockOrder] = (blockID,new_path) # update positionDic accordingly
-        
+            #print 'a ', a
+            #print 'node children ', node.children 
+            node = node.children[int(a)]
         
         def getCandidates(BuID):
             '''
@@ -295,36 +307,51 @@ class PathORAM :
             Return a list of candidates
             '''
             n = len(BuID)
+            #print 'BuID trial: ', BuID
             candidatesList = []
             L = self.positionDic['stash']
+            #print 'L: ', L 
             for bloID,path in L :
                 if path[:n] == BuID :
                     candidatesList.append(bloID)
+            #print 'bloID trial: ', bloID
+            #print 'candidatesList: ',candidatesList
             return candidatesList
         
+        #print 'bucketList', bucketList
+        #print 'client stash', self.clientStash
+        lstash1 = len(self.clientStash)
         for bucket in bucketList : # follow the path from leaf to root
             nodeID = bucket.idNumber
+            #print 'nodeID', nodeID
             candidates = getCandidates(nodeID)
             
             if len(candidates)< Z :
                 for i in range(Z-len(candidates)):
-                    DB = self.createDummyBlock()
-                    candidates.append(DB)
+                    candidates.append('DB')
             
             for i in range(Z):
                 # here we store the candidates blocks (previously stored in the stash) into the bucket
                 bloID = candidates[i]
-                buID, bloPath = self.positionMap[bloID]
-                assert buID == 'stash'
-                block = self.clientStash[bloID]
-                rerand_block = self.rerandomizeBlock(block) 
-                bucket.blockList[i] = rerand_block
+                #print 'bloID: ', bloID
+                if not bloID == 'DB' :
+                    buID, bloPath = self.positionMap[bloID]
+                    assert buID == 'stash'
+                    block = self.clientStash[bloID]
+                    rerand_block = self.rerandomizeBlock(block) 
+                    bucket.blockList[i] = rerand_block
+                    # update the class variable accordingly of the new position of the block
+                    self.clientStash.pop(bloID)
+                    self.positionDic['stash'].remove((bloID,bloPath)) # remove it from the stash
+                    self.positionDic[nodeID][i] = bloID,bloPath
+                    self.positionMap[bloID] = nodeID, bloPath  
+                else :
+                     bucket.blockList[i] = self.createDummyBlock()
+                     self.positionDic[nodeID][i] = ('','')
                 
-                # update the class variable accordingly of the new position of the block
-                self.clientStash.pop(bloID)
-                self.positionDic['stash'].remove((bloID,bloPath)) # remove it from the stash
-                self.positionDic[nodeID][i] = bloID,bloPath
-                self.positionMap[bloID] = nodeID, bloPath                
+                              
+        lstash2 = len(self.clientStash)
+        print 'Size of the client stash before, after lookup, and after refilling tree: ', lstash0,lstash1,lstash2
         
         return queriedBlock
         
@@ -335,7 +362,7 @@ class PathORAM :
 def test_example():
     
     # create PO Tree
-    po_tree = PathORAMTree(depth = 2, nbChildren = 2, treeID = 'test_PO_tree')
+    po_tree = PathORAMTree(depth = 5, nbChildren = 4, treeID = 'test_PO_tree')
         
     def fbm():
         return randint(0,1000)
@@ -348,7 +375,7 @@ def test_example():
     
     L = ['ba','be','bi','bo','bu','ca','ce','ci','co','cu','da','de','di','do','du','fa','fe','fi','fo','fu','ga','ge','gi','go','gu','ha','he','hi','ho','hu','ja','je','ji','jo','ju','ka','ke','ki','ko','ku','la','le','li','lo','lu','ma','me','mi','mo','mu','na','ne','ni','no','nu','pa','pe','pi','po','pu','ra','re','ri','ro','ru','sa','se','si','so','su','ta','te','ti','to','tu','va','ve','vi','vo','vu','wa','we','wi','wo','wu','xa','xe','xi','xo','xu','za','ze','zi','zo','zu']
     words  = []
-    for i in range(20):
+    for i in range(1000):
         word = ''
         for j in range(3) :
             syllab = sample(L,1)[0]
@@ -362,5 +389,8 @@ def test_example():
     print 'client Stash: ',PO.clientStash,'\n'
     print 'position Map: ',PO.positionMap,'\n'
     print 'position Dic: ',PO.positionDic,'\n'
+    
+    for i in range(1000):
+        PO.queryBlock(0)
     
     return PO
