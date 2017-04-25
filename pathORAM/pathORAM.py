@@ -10,6 +10,9 @@ email : firstname.lastname@uclouvain.be
 
 from Crypto.Random.random import randint
 from random import sample
+import time
+
+NO_PRINT = False
 
 class PathORAMTree :
     
@@ -31,6 +34,14 @@ class PathORAMTree :
         self.depth = depth # of the tree
         self.treeHash = treeHash #MD hash of the tree
         self.treeID = treeID
+        
+        tLoad = Z
+        st = 1
+        for i in range(depth):
+            st = st*nbChildren
+            tLoad = tLoad + Z*st
+            
+        self.tLoad = tLoad
         
     def __str__(self):
         return 'Path ORAM Tree '+str(self.treeID)+' with root \n\t'+str(self.root)+'\n\t Z = '+str(self.Z)+'\n\t number of children = '+str(self.nbChildren)+'\n\t depth = '+str(self.depth)+'\n\t and bucket list : \n\t\t'+str(self.bucketList)
@@ -234,6 +245,38 @@ class PathORAM :
             self.positionDic['stash'].append((blockID,path))
             self.positionMap[blockID] = ('stash',path)
             self.clientStash[blockID] = block
+            
+    def randomlyAssignStash(self):
+        '''
+        This method randomly assign each block of the stash into the PO Tree.
+        For this method to work, the PO tree must contain enough empty spaces!
+        '''
+        stash_copy = self.clientStash.copy()
+        bucketList = self.positionDic.keys()
+        bucketList.remove('stash')
+        for blockID in stash_copy :
+            bucketID,path = self.positionMap[blockID]
+            assert bucketID == 'stash'
+            assert (blockID,path) in self.positionDic['stash']
+            # reassign block
+            cond = True
+            nbTries = 0
+            while cond :
+                if nbTries > 1000 :
+                    print 'the number of tries exceed 1000, the method stops'
+                    return
+                r = randint(0, len(bucketList)-1)
+                randomBucketID = bucketList[r]
+                if ('', '') in self.positionDic[randomBucketID] :
+                    # there is one empty block in the bucket
+                    i = self.positionDic[randomBucketID].index(('',''))
+                    self.clientStash.pop(blockID)
+                    self.positionDic[randomBucketID][i] = (blockID,path)
+                    self.positionMap[blockID] = (randomBucketID,path)
+                    cond = False
+                    
+                nbTries += 1
+                
         
         
     def queryBlock(self,blockID):
@@ -270,6 +313,7 @@ class PathORAM :
         path_copy = path[1:]+'0'
         #print 'path ', path+'0'
         bucketList = [] # bucketList will be used afterwards to rewrite blocks into the tree
+        dummyblockList = []
         
         while not node.isLeaf :
             
@@ -291,6 +335,11 @@ class PathORAM :
                     else :
                         self.positionDic['stash'].append((block_i_ID,block_i_path)) # update positionDic accordingly
                         self.positionMap[block_i_ID] = ('stash',block_i_path) # update positionMap accordingly
+                        
+                else :
+                    # This is a dummy block, we have to fake its retrieval
+                    #TODO: fake retrieval
+                    dummyblockList.append('dummy block')
             
             bucketList = [node] +bucketList
             
@@ -328,13 +377,17 @@ class PathORAM :
             
             if len(candidates)< Z :
                 for i in range(Z-len(candidates)):
-                    candidates.append('DB')
+                    if len(dummyblockList)>0 :
+                        candidates.append(dummyblockList.pop(0))
+                    else :
+                        print '! Creation of new dummy block !'
+                        candidates.append('new DB')
             
             for i in range(Z):
                 # here we store the candidates blocks (previously stored in the stash) into the bucket
                 bloID = candidates[i]
                 #print 'bloID: ', bloID
-                if not bloID == 'DB' :
+                if not bloID == 'new DB' and not bloID == 'dummy block' :
                     buID, bloPath = self.positionMap[bloID]
                     assert buID == 'stash'
                     block = self.clientStash[bloID]
@@ -345,13 +398,22 @@ class PathORAM :
                     self.positionDic['stash'].remove((bloID,bloPath)) # remove it from the stash
                     self.positionDic[nodeID][i] = bloID,bloPath
                     self.positionMap[bloID] = nodeID, bloPath  
+                elif bloID == 'dummy block' :
+                    #rerand_block = self.rerandomizeBlock(dummyBlock) 
+                    bucket.blockList[i] = self.createDummyBlock()
+                    self.positionDic[nodeID][i] = ('','')
                 else :
-                     bucket.blockList[i] = self.createDummyBlock()
-                     self.positionDic[nodeID][i] = ('','')
+                    bucket.blockList[i] = self.createDummyBlock()
+                    self.positionDic[nodeID][i] = ('','')
                 
                               
         lstash2 = len(self.clientStash)
-        print 'Size of the client stash before, after lookup, and after refilling tree: ', lstash0,lstash1,lstash2
+        if not dummyblockList == []:
+            print 'dummyblock list is not empty !'
+            for dummyBlock in dummyblockList :
+                self.rerandomizeBlock(dummyBlock)
+        if not NO_PRINT :
+            print 'Size of the client stash before, after lookup, and after refilling tree: ', lstash0,lstash1,lstash2
         
         return queriedBlock
         
@@ -359,38 +421,79 @@ class PathORAM :
 
 ##################### Test Example #############################################
 
-def test_example():
+def test_example(depth = 5,nbChildren = 4,nbWords = None):
     
     # create PO Tree
-    po_tree = PathORAMTree(depth = 5, nbChildren = 4, treeID = 'test_PO_tree')
+    po_tree = PathORAMTree(depth = depth , nbChildren = nbChildren , treeID = 'test_PO_tree')
+    
+    print 'theoretic load of the tree is ', po_tree.tLoad
+    
+    if nbWords ==  None :
+        nbWords = int(po_tree.tLoad/4)
+        
+    print 'parameters are ', depth, nbChildren, nbWords 
         
     def fbm():
         return randint(0,1000)
+        
+    t0 = time.time()
     
     po_tree.setup(fbm)
     
-    #print po_tree
-    
     PO = PathORAM(po_tree)
+    
+    t1 = time.time()
+    
+    print 'Path ORAM tree created'
     
     L = ['ba','be','bi','bo','bu','ca','ce','ci','co','cu','da','de','di','do','du','fa','fe','fi','fo','fu','ga','ge','gi','go','gu','ha','he','hi','ho','hu','ja','je','ji','jo','ju','ka','ke','ki','ko','ku','la','le','li','lo','lu','ma','me','mi','mo','mu','na','ne','ni','no','nu','pa','pe','pi','po','pu','ra','re','ri','ro','ru','sa','se','si','so','su','ta','te','ti','to','tu','va','ve','vi','vo','vu','wa','we','wi','wo','wu','xa','xe','xi','xo','xu','za','ze','zi','zo','zu']
     words  = []
-    for i in range(1000):
+    for i in range(nbWords):
         word = ''
-        for j in range(3) :
+        for j in range(8) :
             syllab = sample(L,1)[0]
             word += syllab
         words.append((i,word))
         
-    #print words
+    print 'List of blocks generated'
+    
+    t2 = time.time()
         
     PO.fillupStash(words)
     
-    print 'client Stash: ',PO.clientStash,'\n'
-    print 'position Map: ',PO.positionMap,'\n'
-    print 'position Dic: ',PO.positionDic,'\n'
+    t3 = time.time()
     
-    for i in range(1000):
+    print 'Stash filled'
+    
+    '''
+    if len(PO.clientStash)< 1000 :
+        print 'client Stash: ',PO.clientStash,'\n'
+        print 'position Map: ',PO.positionMap,'\n'
+        print 'position Dic: ',PO.positionDic,'\n'
+        
+    '''
+        
+    #PO.randomlyAssignStash()
+    PO.queryBlock(0)
+    
+    t4 = time.time()
+    
+    print 'Blocks reassigned'
+    
+    '''
+    count = 0
+    while len(PO.clientStash) > 10 and count < 10000 :
         PO.queryBlock(0)
+        count += 1
+        
+    print 'count ', count
+    '''
     
-    return PO
+    return PO, t1-t0,t2-t1,t3-t2,t4-t3
+    
+    
+def testTime(bound):
+    for i in range(3,bound):
+        PO, tt1, tt2, tt3, tt4 = test_example(depth = i,nbChildren = 2)
+        print 'i', i
+        print tt1, tt2, tt3, tt4
