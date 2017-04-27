@@ -8,6 +8,9 @@ Address : Place du Levant 3, 1348 Louvain-la-Neuve, BELGIUM
 email : firstname.lastname@uclouvain.be
 """
 
+from Crypto.Random.random import randint
+from random import sample
+
 def pathToIndexList(path,nbChildren,Z):
     '''
     Given a path of the form a string of integers ranging from 0 to nbChildren,
@@ -78,6 +81,7 @@ class PathORAMTree :
             tLoad = tLoad + Z*st
             
         self.tLoad = tLoad
+        self.nbNodes = tLoad/Z
    
     def __str__(self):
         return 'Path ORAM Tree '+str(self.treeID)+' with root \n\t Z = '+str(self.Z)+'\n\t number of children = '+str(self.nbChildren)+'\n\t depth = '+str(self.depth)+'\n\t and bucket list : \n\t\t'+str(self.bucketList)
@@ -93,11 +97,8 @@ class PathORAMTree :
         '''
         
         for i in range(self.tLoad):
-            T = ()
-            for j in range(self.Z):
-                T += (fillingBlockMethod(),)
-                
-            self.bucketList.append(T)
+            B = fillingBlockMethod()
+            self.bucketList.append(B)
             
     def merkleDamgardHash(self):
         return None
@@ -105,7 +106,7 @@ class PathORAMTree :
         
 class PathORAM :
     
-    def __init__(self,POTree, rerandomizeBlock = None):
+    def __init__(self,POTree, creatDummyBlock = None, rerandomizeBlock = None):
         '''
         - POTree is the Path ORAM tree in which the data will be stored
         
@@ -124,6 +125,108 @@ class PathORAM :
         self.positionMap = {} # stores entires of the form {blockID : (bucketID,path)}
         self.clientStash = {} # stores entires of the form {blockID : block }
         self.pathList = self.buildPathList()
+        
+        if rerandomizeBlock == None :
+            def fb(block):
+                return ('rerand', block)
+            self.rerandomizeBlock = fb
+        else :
+            self.rerandomizeBlock = rerandomizeBlock
+            
+        if creatDummyBlock == None :
+            def f():
+                return 'dummy block'
+            self.createDummyBlock = f
+        else :
+            self.createDummyBlock = creatDummyBlock
+        
+        
+        
+    def buildPathList(self):
+        '''
+        this method returns an iterable of the path of self.POTree
+        A path is a string of the form '025103...40' where a letter x at index i 
+        indicates that the child x of the previous node of level i-1 is in the
+        path. The first letter is 0, for the root and the last is always 0 for a
+        leaf.
+        '''
+        
+        def genWords(alphabet,length):
+            '''
+            alphabet is a list of string
+            '''
+            if length == 1 :
+                return alphabet
+            else :
+                new_words = []
+                words = genWords(alphabet,length-1)
+                for word in words :
+                    for letter in alphabet :
+                        new_words.append(letter+word)
+                        
+                return new_words
+                       
+        alphabet  = []
+        for i in range(self.POTree.nbChildren):
+            alphabet.append(str(i))
+            
+        paths = genWords(alphabet,self.POTree.depth)
+        pathList = []
+        for path in paths :
+            pathList.append('0'+path)
+        return pathList
+    
+    """
+    def fillupStash(self,blockList):
+        '''
+        Given a blockList (of the form blockId, block = blockList[i]), this
+        method fills up the self.clientStash and attributes uniformly randomly 
+        a path to each block. The method also sets up the self.positionDic
+        '''
+        n = len(self.pathList)
+        
+        assert self.positionDic['stash'] == [] # Stash is not empty do not use this method!
+    
+        
+        for i in range(len(blockList)):
+            blockID, block = blockList[i]
+            r = randint(0,n-1)
+            path = self.pathList[r]
+            
+            self.positionDic['stash'].append((blockID,path))
+            self.positionMap[blockID] = ('stash',path)
+            self.clientStash[blockID] = block
+    """
+    
+    def fillupTree(self,blockList):
+        '''
+        This method randomly assign blocks to the tree nodes and pad with dummy
+        blocks
+        We assume here that the client stash contains the (real) blocks
+        and that the tree is empty
+        '''
+        #Z = self.POTree.Z
+        blockDic = {}
+        k = len(blockList)
+        t = self.POTree.tLoad
+        r = k-t # the number of dummyblocks to create
+        for i in range(k):
+            blockID, block = blockList[i]
+            blockDic[blockID] = block
+            
+        for i in range(r):
+            dumID = 'DB'+str(i)
+            dumBlock = self.createDummyBlock()
+            blockDic[dumID] = dumBlock
+            
+        assert len(blockDic) == t # we now have exactly enough blocks to fill up the tree
+        
+        new_blockList = []
+        for i in range(t):
+            randomBlockID = sample(blockDic,1)[0]
+            randomBlock = blockDic.pop(randomBlockID)
+            new_blockList.append(randomBlock)
+            
         
     
     
