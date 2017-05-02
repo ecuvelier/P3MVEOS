@@ -56,6 +56,37 @@ def pathToIndexList(path,nbChildren,Z):
     
     return indexesList
     
+def positionToSubPath(position,nbChildren,Z,depth):
+    '''
+    Given a position in a list representing the tree,
+    return the subpath leading to the node of the tree.
+    '''
+    
+    n = nbChildren
+    order = position % Z
+    node_pos = position - order
+    
+    index = 0
+    a = 0
+    for i in range(depth) :
+        b = a + n**i
+        if  a*Z <= position and position < b*Z :
+            index = i
+            break
+        
+        if i == depth-1 :
+            print 'problem!'
+        a = b
+    
+    pivot = a*Z
+    c = position - pivot
+    parent_pos = c//(Z*n**index)
+    
+    d = pivot + parent_pos*Z*(i-1)
+    current_pos = (position-d)//(Z)
+            
+    
+    
     
 class PathORAMTree :
     def __init__(self,bucketList = [], Z = 4, nbChildren = 2 ,depth = 10, treeHash = '', treeID=''):
@@ -202,8 +233,7 @@ class PathORAM :
         '''
         This method randomly assign blocks to the tree nodes and pad with dummy
         blocks
-        We assume here that the client stash contains the (real) blocks
-        and that the tree is empty
+        We assume here that the tree is empty
         '''
         #Z = self.POTree.Z
         blockDic = {}
