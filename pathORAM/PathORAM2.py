@@ -28,7 +28,7 @@ def pathToIndexList(path,nbChildren,Z):
         
     pow_n.reverse()
     
-    print 'pow_n', pow_n
+    #print 'pow_n', pow_n
         
     def prodVec(X,Y):
         assert len(X) == len(Y)
@@ -43,7 +43,7 @@ def pathToIndexList(path,nbChildren,Z):
         
     indexesList = range(Z)
     
-    print 'indexesList', indexesList
+    #print 'indexesList', indexesList
 
     for i in range(1,k):
         pr = prodVec(pow_n[-i:],pathList[:i])
@@ -52,7 +52,7 @@ def pathToIndexList(path,nbChildren,Z):
         seg = range(a,b)
         indexesList += seg
         
-        print 'seg', seg
+        #print 'seg', seg
     
     return indexesList
     
@@ -63,8 +63,8 @@ def positionToSubPath(position,nbChildren,Z,depth):
     '''
     
     n = nbChildren
-    order = position % Z
-    node_pos = position - order
+    #order = position % Z
+    #node_pos = position - order
     
     index = 0
     a = 0
@@ -74,31 +74,50 @@ def positionToSubPath(position,nbChildren,Z,depth):
             index = i
             break
         
-        if i == depth-1 :
-            print 'problem!'
+        
         a = b
-    
+        
+    assert  i != depth-1 # problem!
     pivot = a*Z
-    c = position - pivot
-    parent_pos = c//(Z*n**index)
+    #print 'pivot',pivot
+    #print 'index',index
+    subPath = ''
     
-    d = pivot + parent_pos*Z*(i-1)
-    current_pos = (position-d)//(Z)
+    for k in range(0,index+1):
+        Z_n_i_minus_k = Z*n**(index-k)
+        #remain = (position-pivot) % Z_n_i_minus_k
+        #j_k = (position-pivot-remain)/Z_n_i_minus_k
+        j_k = (position-pivot)//Z_n_i_minus_k
+        pivot = pivot + j_k*Z_n_i_minus_k
+        #print 'pivot',pivot
+        subPath += str(j_k)
+        
+    return subPath
+    
+    
+def possiblePaths(subPath,nbChildren,depth):
+    if len(subPath) == depth :
+        return [subPath]
+        
+    L = []
+    for i in range(nbChildren):
+        L_i = possiblePaths(subPath+str(i),nbChildren,depth)
+        L = L+L_i
+    
+    return L
             
     
-    
-    
 class PathORAMTree :
-    def __init__(self,bucketList = [], Z = 4, nbChildren = 2 ,depth = 10, treeHash = '', treeID=''):
+    def __init__(self,blocksList = [], Z = 4, nbChildren = 2 ,depth = 10, treeHash = '', treeID=''):
         '''
-        - bucketList is the list of all the nodes of the tree ordered in a canonic way
-        - Z is the number of blocks per bucket
+        - blocksList is the list of all the blocks of the tree ordered in a canonic way
+        - Z is the number of blocks per node (or bucket)
         - nbChildren is the exact number of children a node must have 
         - depth is the number of levels of the tree
         - treeHash is the Merkle-Damgard hash of the tree
         - treeID is a string used to identify the tree
         '''
-        self.bucketList = bucketList
+        self.blocksList = blocksList
         self.Z = Z # exact number of blocks in each bucket
         self.nbChildren = nbChildren # exact number of children a bucket has
         self.depth = depth # of the tree
@@ -131,6 +150,14 @@ class PathORAMTree :
             B = fillingBlockMethod()
             self.bucketList.append(B)
             
+            
+    def getBlocks(self,indexesList):
+        L = []
+        for position in indexesList :
+            L.append(self.blocksList[position])
+            
+        return L
+            
     def merkleDamgardHash(self):
         return None
         
@@ -152,9 +179,10 @@ class PathORAM :
         '''
         
         self.POTree = POTree
-        self.positionDic = {'stash':[]} # stores entries of the form {bucketID : [(blockID,path),...,] of size Z}
-        self.positionMap = {} # stores entires of the form {blockID : (bucketID,path)}
-        self.clientStash = {} # stores entires of the form {blockID : block }
+        self.positionDic = {'stash':{}} # stores entries of the form {position : (blockID,path)} or {'stash':{blockID:path}}
+        self.positionMap = {} # stores entries of the form {blockID : (position,path)}
+        self.clientStash = {} # stores entries of the form {blockID : block }
+        self.dummyStash = {} # stores entries of the form {blockID : block }
         self.pathList = self.buildPathList()
         
         if rerandomizeBlock == None :
@@ -239,7 +267,7 @@ class PathORAM :
         blockDic = {}
         k = len(blockList)
         t = self.POTree.tLoad
-        r = k-t # the number of dummyblocks to create
+        r = k-t # the number of dutLoadmmyblocks to create
         for i in range(k):
             blockID, block = blockList[i]
             blockDic[blockID] = block
@@ -253,9 +281,76 @@ class PathORAM :
         
         new_blockList = []
         for i in range(t):
-            randomBlockID = sample(blockDic,1)[0]
+            randomBlockID = sample(blockDic,1)[0]  #TODO: better randomness here
             randomBlock = blockDic.pop(randomBlockID)
             new_blockList.append(randomBlock)
+            
+            subpath = positionToSubPath(i,self.POTree.nbChildren,self.POTree.Z,self.POTree.depth)
+            possiblePathsList = possiblePaths(subpath,self.POTree.nbChildren,self.POTree.depth)
+            l = len(possiblePathsList)
+            r = randint(0,l)
+            path = possiblePathsList[r]
+            
+            self.positionDic[i] = (randomBlockID,path)
+            self.positionMap[randomBlockID] = (i,path)
+            
+        self.POTree.bucketList = new_blockList
+        
+    def queryBlock(self,blockID):
+        '''
+        This method returns the block stored in the self.POTree which corresponds
+        to the blockID
+        
+        Doing so, the method modifies all the blocks along the path corresponding
+        to the block. The blocks are either :
+            - rerandomized
+            - moved in the stash
+            - reassigned in the path
+            - replaced by dummy blocks
+        '''
+        assert not self.isADummyBlock(blockID)
+        
+        n = self.POTree.nbChildren
+        Z = self.POTree.Z
+        position, path = self.positionMap[blockID]
+        assert path in self.pathList
+        
+        indexesList = pathToIndexList(path,n,Z)
+        
+        assert ((position != 'stash') and (position in indexesList)) or (position == 'stash')
+        
+        l = len(self.pathList)
+        r = randint(0,l)
+        new_path = self.pathList[r]
+        
+        blockList = self.POTree.getBlocks(indexesList)
+        
+        if position == 'stash':
+            querriedBlock = self.clientStash[blockID]
+            self.positionDic['stash'][blockID] = new_path
+            self.positionMap[blockID] = position, new_path
+        else :
+            querriedBlock = blockList[indexesList.index(position)]
+            self.positionDic[position] = blockID, new_path
+            self.positionMap[blockID] = position, new_path
+            
+        for i in range(len(blockList)) :
+            block_i = blockList[i]
+            pos_i = indexesList[i]
+            block_i_ID, path_i = self.positionDic[pos_i]
+            
+            # Update block position and add it to the stash or to the dummystash
+            if self.isADummyBlock(block_i_ID) :
+                self.dummyStash[block_i_ID] = block_i
+                
+            else :
+                self.clientStash[block_i_ID] = block_i
+                self.positionMap[block_i_ID] = ('stash',path_i)
+                
+            self.positionDic[pos_i] = (None,None)
+            
+            
+        return querriedBlock
             
         
     
