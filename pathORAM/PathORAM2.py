@@ -76,8 +76,9 @@ def positionToSubPath(position,nbChildren,Z,depth):
         
         
         a = b
+    else :
+        assert  i != depth-1 # problem!
         
-    assert  i != depth-1 # problem!
     pivot = a*Z
     #print 'pivot',pivot
     #print 'index',index
@@ -234,29 +235,14 @@ class PathORAM :
         for path in paths :
             pathList.append('0'+path)
         return pathList
-    
-    """
-    def fillupStash(self,blockList):
-        '''
-        Given a blockList (of the form blockId, block = blockList[i]), this
-        method fills up the self.clientStash and attributes uniformly randomly 
-        a path to each block. The method also sets up the self.positionDic
-        '''
-        n = len(self.pathList)
         
-        assert self.positionDic['stash'] == [] # Stash is not empty do not use this method!
-    
+    def getDummyBlock(self):
+        '''
+        Returns a dummy block either by taking one from the dummy stash or by 
+        creating a new one.
+        '''
+        return None
         
-        for i in range(len(blockList)):
-            blockID, block = blockList[i]
-            r = randint(0,n-1)
-            path = self.pathList[r]
-            
-            self.positionDic['stash'].append((blockID,path))
-            self.positionMap[blockID] = ('stash',path)
-            self.clientStash[blockID] = block
-    """
-    
     def fillupTree(self,blockList):
         '''
         This method randomly assign blocks to the tree nodes and pad with dummy
@@ -295,6 +281,45 @@ class PathORAM :
             self.positionMap[randomBlockID] = (i,path)
             
         self.POTree.bucketList = new_blockList
+        
+    def getCandidates(self,indexesList,path):
+        
+        L = indexesList + []
+        Z = self.POTree.Z
+        M = {}
+        L.reverse()
+
+        for blockID_i in self.clientStash.keys() :
+            pos_i, path_i = self.positionMap[blockID_i]
+            M[path_i] = blockID_i
+                    
+        path_copy = path+''
+        
+        index = 0
+        new_blockList = []
+        
+        while path_copy != '':
+            
+            for i in range(Z):
+                position = L[index]
+                candidate = None
+                pathList = M.keys()
+                for path in pathList :
+                    if path[:len(path_copy)] == path_copy :
+                        candidate = M.pop(path)
+                        break
+                    
+                if not candidate == None :
+                    new_blockList.append(position,candidate)
+                else :
+                    dummyBlock = self.getDummyBlock()
+                    new_blockList.append(position,dummyBlock)
+                index +=1
+            
+            path_copy = path_copy[:-1]
+            
+        return new_blockList
+        
         
     def queryBlock(self,blockID):
         '''
@@ -348,6 +373,11 @@ class PathORAM :
                 self.positionMap[block_i_ID] = ('stash',path_i)
                 
             self.positionDic[pos_i] = (None,None)
+            
+        new_block_list = self.getCandidates(indexesList,path)
+        
+        for position_j, blockID_j in new_block_list :
+            pass
             
             
         return querriedBlock
