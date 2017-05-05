@@ -158,6 +158,11 @@ class PathORAMTree :
             L.append(self.blocksList[position])
             
         return L
+        
+    def writeBlocks(self, L):
+        
+        for position, block in L :
+            self.blocksList[position] = block
             
     def merkleDamgardHash(self):
         return None
@@ -165,7 +170,7 @@ class PathORAMTree :
         
 class PathORAM :
     
-    def __init__(self,POTree, creatDummyBlock = None, rerandomizeBlock = None):
+    def __init__(self,POTree, creatDummyBlock = None, rerandomizeBlock = None, isADummyBlock = None):
         '''
         - POTree is the Path ORAM tree in which the data will be stored
         
@@ -180,26 +185,35 @@ class PathORAM :
         '''
         
         self.POTree = POTree
-        self.positionDic = {'stash':{}} # stores entries of the form {position : (blockID,path)} or {'stash':{blockID:path}}
+        self.positionList = [(None,None)]*self.POTree.tLoad # at each position stores entries of the form (blockID,path) 
         self.positionMap = {} # stores entries of the form {blockID : (position,path)}
-        self.clientStash = {} # stores entries of the form {blockID : block }
+        self.clientStash = {} # stores entries of the form {blockID : block}
         self.dummyStash = {} # stores entries of the form {blockID : block }
         self.pathList = self.buildPathList()
         
         if rerandomizeBlock == None :
-            def fb(block):
+            def fa(block):
                 return ('rerand', block)
-            self.rerandomizeBlock = fb
+            self.rerandomizeBlock = fa
         else :
             self.rerandomizeBlock = rerandomizeBlock
             
         if creatDummyBlock == None :
-            def f():
-                return 'dummy block'
-            self.createDummyBlock = f
+            def fb():
+                return 'DB'+(str(randint(0,2**15))), 'dummy block'
+            self.createDummyBlock = fb
         else :
             self.createDummyBlock = creatDummyBlock
-        
+            
+        if isADummyBlock == None :
+            def fc(blockID):
+                if blockID[1] == 'DB' :
+                    return True
+                else :
+                    return False
+            self.isADummyBlock = fc
+        else :
+            self.isADummyBlock = isADummyBlock
         
         
     def buildPathList(self):
@@ -241,7 +255,18 @@ class PathORAM :
         Returns a dummy block either by taking one from the dummy stash or by 
         creating a new one.
         '''
-        return None
+        if len(self.dummyStash) > 0 :
+            L = self.dummyStash.keys()
+            dummyblock_ID = sample(L,1)[0]
+            dummyblock = self.dummyStash[dummyblock_ID]
+            rerand_dummyblock = self.rerandomizeBlock(dummyblock)
+            self.dummyStash[dummyblock_ID] = rerand_dummyblock
+        else :
+            dummyblock_ID,dummyblock = self.createDummyBlock()
+            self.dummyStash[dummyblock_ID] = dummyblock
+            
+        return dummyblock_ID
+
         
     def fillupTree(self,blockList):
         '''
@@ -277,7 +302,7 @@ class PathORAM :
             r = randint(0,l)
             path = possiblePathsList[r]
             
-            self.positionDic[i] = (randomBlockID,path)
+            self.positionList[i] = (randomBlockID,path)
             self.positionMap[randomBlockID] = (i,path)
             
         self.POTree.bucketList = new_blockList
@@ -312,8 +337,8 @@ class PathORAM :
                 if not candidate == None :
                     new_blockList.append(position,candidate)
                 else :
-                    dummyBlock = self.getDummyBlock()
-                    new_blockList.append(position,dummyBlock)
+                    dummyBlock_ID = self.getDummyBlock()
+                    new_blockList.append(position,dummyBlock_ID)
                 index +=1
             
             path_copy = path_copy[:-1]
@@ -352,32 +377,47 @@ class PathORAM :
         
         if position == 'stash':
             querriedBlock = self.clientStash[blockID]
-            self.positionDic['stash'][blockID] = new_path
-            self.positionMap[blockID] = position, new_path
+            self.clientStash[blockID] = querriedBlock
         else :
             querriedBlock = blockList[indexesList.index(position)]
-            self.positionDic[position] = blockID, new_path
-            self.positionMap[blockID] = position, new_path
+            self.positionList[position] = blockID, new_path
+        
+        self.positionMap[blockID] = position, new_path
             
         for i in range(len(blockList)) :
             block_i = blockList[i]
             pos_i = indexesList[i]
-            block_i_ID, path_i = self.positionDic[pos_i]
+            block_i_ID, path_i = self.positionList[pos_i]
             
             # Update block position and add it to the stash or to the dummystash
             if self.isADummyBlock(block_i_ID) :
                 self.dummyStash[block_i_ID] = block_i
+                self.positionMap[block_i_ID] = ('dummy stash',path_i)
                 
             else :
                 self.clientStash[block_i_ID] = block_i
                 self.positionMap[block_i_ID] = ('stash',path_i)
                 
-            self.positionDic[pos_i] = (None,None)
+            self.positionList[pos_i] = (None,None)
             
-        new_block_list = self.getCandidates(indexesList,path)
+        new_block_list = self.getCandidates(indexesList,path) # seek candidates to greedily refill the path of the tree
+        L = []
         
         for position_j, blockID_j in new_block_list :
-            pass
+            if self.isADummyBlock(blockID_j):
+                block_j = self.dummyStash.pop(blockID_j)
+                L.append((position_j,block_j))
+            else :
+                block_j = self.clientStash.pop(blockID_j)
+                new_block_j = self.rerandomizeBlock(block_j)
+                L.append((position_j,new_block_j))
+                
+            old_pos, path_j  = self.positionMap[blockID_j]
+            self.positionList[position_j] = (blockID_j,path_j)
+            self.positionMap[blockID_j] =  (position_j,path_j)
+            
+        
+        self.POTree.writeBlocks(L)
             
             
         return querriedBlock
