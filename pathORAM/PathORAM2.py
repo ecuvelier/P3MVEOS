@@ -357,27 +357,38 @@ class PathORAM :
         k = len(blockList)
         t = self.POTree.tLoad
         r1 = t-k # the number of dummyblocks to create
+        
+        t1 = time.time()
         for blockID, block in blockList:
             blockDic[blockID] = block
+            
+        t2 = time.time()
             
         for i in range(r1):
             dumID = ''
             while dumID in blockDic or dumID == '' :
                 dumID, dumBlock = self.createDummyBlock()
             blockDic[dumID] = dumBlock
+            
+        t3 = time.time()
         
         #print k,t,r1, len(blockDic)
         assert len(blockDic) == t # we now have exactly enough blocks to fill up the tree
         
         new_blockList = []
         
+        tm1,tm2 = 0,0
+        kBD = blockDic.keys()
+        
         for i in range(t):
-            kBD = blockDic.keys()
+            t31 = time.time()
             lBD = len(kBD)
             r2 = randint(0,lBD-1)
-            randomBlockID = kBD[r2]
+            randomBlockID = kBD.pop(r2)
             randomBlock = blockDic.pop(randomBlockID)
             new_blockList.append((i,randomBlock))
+            
+            t32 = time.time()
             
             subpath = positionToSubPath(i,self.POTree.nbChildren,self.POTree.Z,self.POTree.depth,self.sPD)
             """
@@ -391,10 +402,21 @@ class PathORAM :
             self.positionList[i] = (randomBlockID,path)
             self.positionMap[randomBlockID] = (i,path)
             
+            t33 = time.time()
+            
+            tm1 += t32-t31
+            tm2 += t33-t32
+            
             if i % (t//64) == 0:
                 print round((float(i)/t)*100,2), '% done'
+                
+        t4 = time.time()
             
         self.POTree.writeBlocks(new_blockList)
+        
+        t5 = time.time()
+        
+        print 'blockDic insertion:',t2-t1,'\n dummy block creation:',t3-t2,'\n tree filling:',t4-t3,'\n random block extraction:',tm1/t,'\n path attribution:',tm2/t, '\n block rerwriting in tree:',t5-t4
         
     def getCandidates(self,indexesList,path):
         
@@ -564,7 +586,7 @@ def test_example(Z = 3, depth = 3,nbChildren = 3,nbWords = None):
             word += syllab
         blockList.append(('Block '+str(i),word))
         
-    print 'List of blocks generated\n Filling up the tree...'
+    print 'List of blocks generated\n Filling up the tree'
     
     t2 = time.time()
         
