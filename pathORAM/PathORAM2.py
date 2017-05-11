@@ -365,10 +365,7 @@ class PathORAM :
         t2 = time.time()
             
         for i in range(r1):
-            dumID = ''
-            while dumID in blockDic or dumID == '' :
-                dumID, dumBlock = self.createDummyBlock()
-            blockDic[dumID] = dumBlock
+            blockDic['DB'+str(i)] = None
             
         t3 = time.time()
         
