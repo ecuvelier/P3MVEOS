@@ -340,20 +340,6 @@ class PCommitment_Public_Key(fingexp.FingExp):
         else :
             return False
 
-class PCommitment_Secret_Key(fingexp.FingExp):
-    
-    def __init__(self,alpha):
-        self.alpha = alpha
-        
-        self.to_fingerprint = ["alpha"]
-        self.to_export = {"fingerprint": [],"value": ["alpha"]}
-
-    def load(self, data, fingerprints):
-        self.alpha = utils.b64tompz(data["alpha"])
-        
-    def __str__(self):
-        return "Secret Key for Polynomial Commitment: "+str(self.alpha)
-
 class Phone_Number_Commitment_Public_Key(fingexp.FingExp):
     
     def __init__(self,PCommitment_PublicKey):
