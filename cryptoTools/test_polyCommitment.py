@@ -92,6 +92,17 @@ class TestPolyCommitment(unittest.TestCase):
         com3 = com1+com2
         com3p,phi3p = self.pC_PK.commit(phi1_x+phi2_x,phi1prime_x+phi2prime_x)
         self.assertTrue(com3==com3p)
+        
+    def test_rerandomization_of_commitment(self):
+        phi1_x = self.produce_polynomial()
+        com1,phi1prime_x = self.pC_PK.commit(phi1_x)
+        phi1second_x = self.produce_polynomial()
+        
+        com2_x, phi2prime_x = self.pC_PK.rerandomize(com1,phi1prime_x,phi1second_x)
+        
+        self.assertTrue(self.pC_PK.verifyPoly(com2_x,phi1_x,phi2prime_x))
+        
+        
 
     def test_multiplication_of_commitment_by_a_scalar(self):
         phi1_x = self.produce_polynomial()

@@ -141,6 +141,17 @@ class PCommitment_Public_Key(fingexp.FingExp):
             
         return com, phiprime_x
         
+    def rerandomize(self,com,phiprime_x,phisecond_x=None):
+        '''
+        Return a polynomial commitment with a new randomness polynomial
+        '''
+        new_phi_x, n_c = self.commit_messages([self.Fr.zero()],phisecond_x)
+        new_com, phisecond_x = n_c
+        
+        rerand_com = n_c+com
+        
+        return rerand_com, phiprime_x+phisecond_x
+        
     def commit_messages(self,messageslist,phiprime_x= None):
         '''
         Commit to a list of messages m_i by building the polynomial prod(x-m_i)

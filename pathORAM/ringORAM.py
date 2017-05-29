@@ -202,7 +202,7 @@ class PathORAMTree :
   
 class RingORAM :
     
-    def __init__(self,POTree, Z= 4, S = 4, A = 4, nbChildren = 2 ,depth = 10, treeHash = '', createDummyBlock = None, rerandomizeBlock = None, isADummyBlock = None):
+    def __init__(self,POTree, Z= 4, S = 4, A = 4, nbChildren = 2 ,depth = 10, treeHash = '', createDummyBlock = None, rerandomizeBlock = None):
         '''
         - POTree is the Path ORAM tree in which the data will be stored
         - Z is the number of real blocks per node (or bucket)
@@ -213,7 +213,6 @@ class RingORAM :
         - treeHash is the Merkle-Damgard hash of the tree
         - createDummyBlock, a method to call when creating dummyBlocks
         - rerandomizeBlock, a method to re-randomize a block
-        - isADummyBlock, a method that checks if a block is dummy or not
         
         The class initialize the folowing variables:
         - positionMap is a dictionnary used to store the position in which a block
@@ -324,16 +323,6 @@ class RingORAM :
         else :
             self.createDummyBlock = createDummyBlock
             
-        if isADummyBlock == None :
-            def fc(blockID):
-                if blockID[:2] == 'DB' :
-                    return True
-                else :
-                    return False
-            self.isADummyBlock = fc
-        else :
-            self.isADummyBlock = isADummyBlock
-            
         
     def buildPathList(self):
         '''
@@ -385,13 +374,13 @@ class RingORAM :
         Returns a dummy block either by taking one from the dummy stash or by 
         creating a new one.
         '''
-        '''
+        
         if self.dummyStash !=[]:
             return self.dummyStash.pop()
         else :
             return self.createDummyBlock()
-        '''
-        return 'dummy block'
+        
+        #return 'dummy block'
         
 
         
@@ -483,7 +472,7 @@ class RingORAM :
             pos_i, path_i = self.positionMap[blockID_i]
             assert pos_i == 'stash'
             assert path_i != None
-            assert not self.isADummyBlock(blockID_i)
+            
             M[path_i] = blockID_i
                     
         path_copy = path+''
@@ -760,7 +749,7 @@ class RingORAM :
         Also the method might re-shuffle buckets that have been visited more than
         self.S times
         '''
-        assert not self.isADummyBlock(blockID)
+        assert blockID in self.positionMap
         
         position, path = self.positionMap[blockID]
         assert path in self.pathList
