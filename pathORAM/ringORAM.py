@@ -7,11 +7,12 @@ Affiliation : Université catholique de Louvain - ICTEAM - UCL Crypto Group
 Address : Place du Levant 3, 1348 Louvain-la-Neuve, BELGIUM
 email : firstname.lastname@uclouvain.be
 """
-
+import tools.fingexp as fingexp
 from Crypto.Random.random import randint
 from random import sample
 import time
 import pickle
+from cryptoTools.polyCommitment import PolynomialCommitment
 
 def randomPermutation(L):
     '''
@@ -198,6 +199,35 @@ class PathORAMTree :
         
         for position, block in L :
             self.blocksList[position] = block
+        
+            
+class PathORAMTree_for_Polynomial_Commitment(PathORAMTree):
+    
+    def __init__(self,pC_PK, blocksList = [], treeID=''):
+        '''
+        - blocksList is the list of all the blocks of the tree ordered in a canonic way
+        - treeID is a string used to identify the tree
+        '''
+        
+        self.treeID = treeID
+        self.blocksList = blocksList
+        self.pC_PK = pC_PK
+    
+    def getBlocks(self,indexesList):
+        ECG = self.pC_PK.pairing.EFp
+        L = []
+        for position in indexesList :
+            b, X = self.blocksList[position]
+            c = ECG.uncompress(b,X)
+            com = PolynomialCommitment(c, self.pC_PK)
+            L.append(com)
+
+        return L
+        
+    def writeBlocks(self, L):
+        
+        for position, block in L :
+            self.blocksList[position] = block.c.compress()
  
   
 class RingORAM :
@@ -271,6 +301,8 @@ class RingORAM :
         self.pathList = self.buildPathList()
         self.orderedPathList = self.orderListInReverseLexicographic(self.pathList)
         
+        self.hashDic = {}
+        
         # Load the dictionary to speedup computations
         try :
             s = str(self.SZ)+str(self.depth)+str(self.nbChildren)
@@ -308,7 +340,7 @@ class RingORAM :
         # Below are default methods to use when rerandomizeBlock, createDummyBlock
         # and isADummyBlock methods are not specified
         if rerandomizeBlock == None :
-            def fa(block):
+            def fa(block,blockID):
                 #print 'rerandomizing block',block
                 return 'r-'+block
             self.rerandomizeBlock = fa
@@ -322,6 +354,23 @@ class RingORAM :
             self.createDummyBlock = fb
         else :
             self.createDummyBlock = createDummyBlock
+     
+    def hashPath(self,path):
+        path_copy = path[:-1]
+        
+        while path_copy != '' :
+            self.hashNode(path_copy)
+            path_copy = path_copy[:-1]
+            
+        self.treeHash = self.hashDic['0']
+        
+    def hashNode(self, subpath):
+        
+        hashList = []
+        for i in range(self.nbChildren):
+            hashList.append(self.hashDic[subpath+str(i)])
+            
+        self.hashDic[subpath] = fingexp.fingerprint([self.hashDic[subpath]]+hashList)
             
         
     def buildPathList(self):
@@ -376,7 +425,7 @@ class RingORAM :
         '''
         
         if self.dummyStash !=[]:
-            return self.dummyStash.pop()
+            return self.rerandomizeBlock(self.dummyStash.pop(),None)
         else :
             return self.createDummyBlock()
         
@@ -433,6 +482,19 @@ class RingORAM :
         
         t4 = time.time()
         
+        for i in range(0,t,self.SZ):
+            bucket = []
+            subpath = positionToSubPath(i,self.nbChildren,self.SZ,self.depth,self.sPD)
+            for j in range(self.SZ):
+                bucket.append(new_blockList[i+j][0])
+                
+            self.hashDic[subpath] = fingexp.fingerprint(bucket)
+            
+        self.treeHash = self.hashDic['0']
+            
+        
+        t4b = time.time()
+        
         for i in range(t):
             if new_blockList[i][1] == True :
                 blockID, block = new_blockList[i][0]
@@ -440,21 +502,26 @@ class RingORAM :
                 path = randomPath(subpath, self.nbChildren, self.depth+1)
                 self.positionList[i] = (blockID,path,True)
                 self.positionMap[blockID] = (i,path)
+                new_blockList[i] = new_blockList[i][0][1]
                 
             else :
                 # the block is a dummy one
-                pass
+                new_blockList[i] = new_blockList[i][0]
             
-            new_blockList[i] = new_blockList[i][0][1]
+            
+            
                    
-        t5 = time.time()      
+        t5 = time.time()
         
-        self.POTree.writeBlocks(enumerate(new_blockList))
+        L = enumerate(new_blockList)
+        #print 'new_blockList',new_blockList
+        
+        self.POTree.writeBlocks(L)
         
         t6 = time.time()
         
-        print 'permutation of blockList:',t2-t1,'\n buckets creation:',t3-t2,'\n dummy block creation:',t4-t3,'\n filling up of the tree:',t5-t4, '\n block rerwriting in tree:',t6-t5
-        
+        print 'permutation of blockList:',t2-t1,'\n buckets creation:',t3-t2,'\n dummy block creation:',t4-t3,'\n hashing nodes of the tree:',t4b-t4,'\n filling up of the tree:',t5-t4b, '\n block rerwriting in tree:',t6-t5
+    
     def getCandidates(self,indexesList,path):
         '''
         This method returns a list (postion,blockID) of blocks to refill the path.
@@ -563,7 +630,7 @@ class RingORAM :
                 path_i = self.positionList[index][1]
                 block_i = blockList[indexesList.index(index)]
                 
-                self.clientStash[blockID] = self.rerandomizeBlock(bL_copy.pop(bL_copy.index(block_i)))
+                self.clientStash[blockID] = self.rerandomizeBlock(bL_copy.pop(bL_copy.index(block_i)),blockID)
                 self.positionMap[blockID] = 'stash', path_i
                 
         self.dummyStash += bL_copy # Add remaining dummy blocks to the dummy stash
@@ -626,7 +693,7 @@ class RingORAM :
                 
                 if not blockID == None :
                     b_ID_List.append(blockID)
-                    self.clientStash[blockID] = self.rerandomizeBlock(block_i)
+                    self.clientStash[blockID] = self.rerandomizeBlock(block_i,blockID)
                     nblock = (True,first_pos+len(new_bucket),blockID)
                     #print 'inserting nblock (1)', nblock
                     new_bucket.append(nblock)
@@ -647,7 +714,8 @@ class RingORAM :
                         b_ID_List.append(b_ID)
                         
             while len(new_bucket)< self.SZ :
-                nblock = (False,first_pos+len(new_bucket),self.getDummyBlock())
+                dummyBlock = self.getDummyBlock()
+                nblock = (False,first_pos+len(new_bucket),dummyBlock)
                 #print 'inserting nblock (3)', nblock
                 new_bucket.append(nblock)
             
@@ -692,6 +760,12 @@ class RingORAM :
                 # a dummy block
                 self.positionList[position] = None,None,True
                 perm_bucket[i] = (position,perm_bucket[i][2])
+                
+        subpath = positionToSubPath(perm_bucket[0][0],self.nbChildren,self.SZ,self.depth,self.sPD)
+        B = []
+        for i in range(self.SZ):
+            B.append(perm_bucket[i][1])
+        self.hashDic[subpath] = fingexp.fingerprint(B)
                 
         return perm_bucket
                 
@@ -746,8 +820,10 @@ class RingORAM :
             - reassigned in the path
             - replaced by dummy blocks
             
-        Also the method might re-shuffle buckets that have been visited more than
+        The method might re-shuffle buckets that have been visited more than
         self.S times
+        
+        The method recomputes the hash of the tree if some modification occurs
         '''
         assert blockID in self.positionMap
         
@@ -777,7 +853,8 @@ class RingORAM :
             querriedBlock = self.clientStash[blockID]
         else :
             querriedBlock = blockList[select_indexesList.index(position)]
-            self.clientStash[blockID] = self.rerandomizeBlock(querriedBlock)
+            #print 'querriedBlock',querriedBlock
+            self.clientStash[blockID] = self.rerandomizeBlock(querriedBlock,blockID)
         
         self.positionMap[blockID] = 'stash', new_path
         
@@ -785,12 +862,14 @@ class RingORAM :
             self.positionList[index] = None,None,False # False means the dummy blocks have been visited 
         
         buckets_not_to_reshuffle_list = []
+        rehashTree = False
         if self.query_counter == 0  :
             # Time to evict a path according to self.A and the previous number of queries
             # buckets_not_to_reshuffle_list is a list of buckets that have been 
             # reshuffled in the evictPath method and so are not to be re-re-shuffled
             # in the earlyReshuffle method
             buckets_not_to_reshuffle_list = self.evictPath(buckets_to_reshuffle_list)
+            rehashTree = True
             
         for bucket in buckets_not_to_reshuffle_list :
             buckets_to_reshuffle_list.remove(bucket)
@@ -799,6 +878,10 @@ class RingORAM :
         
         if buckets_to_reshuffle_list != [] :
             self.earlyReshuffle(buckets_to_reshuffle_list)
+            rehashTree = True
+            
+        if rehashTree :
+            self.hashPath(path)
         
         return querriedBlock
         

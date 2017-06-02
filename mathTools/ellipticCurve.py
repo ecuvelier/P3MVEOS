@@ -65,6 +65,27 @@ class ECGroup(fingexp.FingExp):
         elif x == None and  y == None:
              #Generate a random element on the curve
             return self.random()
+            
+    def uncompress(self,b,x, Jcoord= False):
+        '''
+        ! This method works only for ECG over prime field (not extension field) !
+        This method returns the EC point (y,x) where y is determined by b :
+        if b is True then y < (p-1)/2
+        '''
+        y_sq_val = x**3+self.E.a*x+self.E.b
+        assert y_sq_val.isquadres()
+            
+        y = y_sq_val.squareroot()
+        p = self.F.char
+        if b:
+            if y.val > (p-1)/2 :
+                y = -y
+        else :
+            if y.val < (p-1)/2 :
+                y = -y
+        
+                
+        return ECPoint(x,y,self.F1,ECG=self,infty=False,Jcoord=Jcoord)
 
     def random(self):
         ''' This method returns a random element of the curve
@@ -345,6 +366,29 @@ class ECPoint:
             else :
                 self.x = self.x/(self.z**2)
                 self.y = self.y/(self.z**3)
+                
+    def compress(self):
+        '''
+        ! This method works only for curves over prime field (not extension field)!
+        Return a compressed representation of the point in affine coordinates. 
+        That is,
+        - self.x
+        - a boolean set to True if p - self.y > p-1/2 and False otherwise
+        '''
+        
+        if self.Jcoord :
+            X = self.x/(self.z**2)
+            Y = self.y/(self.z**3)
+        else :
+            X = self.x
+            Y = self.y
+            
+        p = self.ECG.F.char
+        minus_Y = -Y
+        
+        b = minus_Y.val > (p-1)/2
+        
+        return b,X
 
     def copy(self):
         return ECPoint(self.x,self.y,self.z,self.ECG,self.infty,self.Jcoord)

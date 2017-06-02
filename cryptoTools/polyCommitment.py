@@ -134,6 +134,7 @@ class PCommitment_Public_Key(fingexp.FingExp):
             phiprime_x = new_phiprime_x
                 
         c = EFp.infty
+        #TODO: Optimize here
         for i in range(self.deg_pol+1):
             c = c + (phi_x.coef[i].val)*self.gVec[i] + (phiprime_x.coef[i].val)*self.hVec[i]
             
@@ -148,7 +149,7 @@ class PCommitment_Public_Key(fingexp.FingExp):
         new_phi_x, n_c = self.commit_messages([self.Fr.zero()],phisecond_x)
         new_com, phisecond_x = n_c
         
-        rerand_com = n_c+com
+        rerand_com = new_com+com
         
         return rerand_com, phiprime_x+phisecond_x
         
@@ -188,6 +189,7 @@ class PCommitment_Public_Key(fingexp.FingExp):
         EFp = self.pairing.EFp
         
         c_prime = EFp.infty
+        #TODO: Optimize here
         for i in range(self.deg_pol+1):
             c_prime = c_prime + (phi_x.coef[i].val)*self.gVec[i] + (phiprime_x.coef[i].val)*self.hVec[i]
             
@@ -233,6 +235,7 @@ class PCommitment_Public_Key(fingexp.FingExp):
         gp = self.gprimeVec[-1]
         gp_alpha = self.gprimeVec[-2]
         
+        #TODO: Optimize here
         gprime_b = (b.val)*gp
         t1 = gp_alpha-gprime_b
         u1 = (phi_b.val)*g + (phiprime_b.val)*h
@@ -287,6 +290,7 @@ class PCommitment_Public_Key(fingexp.FingExp):
             prod_x_minus_b_j = new_prod_x_minus_b_j
             
         t1 = EFp2.infty
+        #TODO: Optimize here
         for i in range(self.deg_pol+1):
             t1 +=  prod_x_minus_b_j.coef[i].val*self.gprimeVec[i]
         
@@ -306,6 +310,7 @@ class PCommitment_Public_Key(fingexp.FingExp):
             assert phi_b_eval.iszero()
             return b, w_b, phiprime_b_eval, None
         else :
+            #TODO: Optimize here
             z_j = phi_b_eval.val*self.gVec[-1] + phiprime_b_eval.val*self.hVec[-1]
             proof_z_j = self.openingNIZKPOK(com,phi_x,phiprime_x,khi_x,khiprime_x)
             return b, w_b, None, (z_j, proof_z_j)
@@ -342,6 +347,7 @@ class PCommitment_Public_Key(fingexp.FingExp):
         if A == None :
             return self.verifyEval(com, b, Fr.zero(), phiprime_b_eval, w_b)
         elif phiprime_b_eval == None :
+            #TODO: Optimize here
             z_j, proof_z_j = A
             cond1 = self.checkOpeningNIZKPOK(com,proof_z_j)
             gprime_b = b.val*gp

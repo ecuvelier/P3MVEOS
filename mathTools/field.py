@@ -301,11 +301,60 @@ class FieldElem():
             check this case and raises an error. Verification has to be done
             before calling the method.
         '''
+        p = self.F.p
+        
+        if p % 4 == 3 :
+            return self**((p+1)/4)
+        
         g = self.F.g
         if g == None :
             g = self.F.findnonresidue()
             self.F.g = g
-
+            
+        
+        Q = p-1
+        S = 0
+        while Q % 2 == 0 :
+            S += 1
+            Q = Q/2
+        
+        assert p-1 == Q*2**S
+        
+        R = self**((Q+1)/2)
+        c = g**Q
+        t = self**Q
+        M = S
+        
+        one = self.F.one()
+        
+        def find_i(M,t):
+            i=1
+            t2 = t
+            pow2i = 1
+             
+            while t2 != one and i<M :
+                pow2i = 2*pow2i
+                t2 = t**(pow2i)
+                i +=  1
+            assert t2 == one
+            return i
+        
+        while  t != one :
+            i = find_i(M,t)
+            e = 2**(M-i-1)
+            b = c**e
+            R = R*b
+            c = b**2
+            t = t*c
+            M = i
+         
+        if R**2 != self:
+            print 'FAILURE to find square root', R,R**2,self
+            return None
+        else :
+            return R
+            
+        """
         q = self.F.q
 
         s=0
@@ -323,9 +372,14 @@ class FieldElem():
             if not c==self.F.one() :
                 e = e+b
         h = self*(g**(-e))
-        b = (g**(e/2))*(h**((t+1)/2))
-        assert b**2 == self # FAILURE to find square root
-        return b
+        sr = (g**(e/2))*(h**((t+1)/2))
+        
+        if sr**2 != self:
+            print 'FAILURE to find square root', sr,sr**2,self
+            return None
+        else :
+            return sr
+        """
 
     def fingerprint(self):
         return fingexp.fingerprint(self.val)

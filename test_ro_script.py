@@ -36,21 +36,25 @@ def produce_phoneNumbers():
 
 
 
-def test_real_example(Z = 3, S = 4, A = 4,nbChildren = 3, depth = 3,nbWords = None):
+def test_real_example(Z = 4, S = 4, A = 4,nbChildren = 2, depth = 3,nbWords = None):
     
     # create PO Tree
-    po_tree = ringO.PathORAMTree( treeID = 'test_PO_tree')
+    po_tree = ringO.PathORAMTree_for_Polynomial_Commitment(pC_PK, treeID = 'test_PO_tree')
     
     phiprime_dic = {}
     
     def cDB():
-        com, phiprime = pC_PK.commit_messages([Fr.zero()])
+        phi_x, c = pC_PK.commit_messages([Fr.zero()])
+        com, phiprime_x = c
         return com
         
     def rB(com,block_id):
-        phiprime_x = phiprime_dic[block_id]
-        rerand_com, new_phiprime = pC_PK.rerandomize(com,phiprime_x)
-        phiprime_dic[block_id] = new_phiprime
+        if block_id == None :
+            rerand_com = cDB()
+        else :
+            phiprime_x = phiprime_dic[block_id]
+            rerand_com, new_phiprime = pC_PK.rerandomize(com,phiprime_x)
+            phiprime_dic[block_id] = new_phiprime
         return rerand_com
     
     RO = ringO.RingORAM(po_tree,Z = Z, S=S, A=A , nbChildren = nbChildren, depth = depth, createDummyBlock = cDB, rerandomizeBlock= rB)
@@ -58,7 +62,7 @@ def test_real_example(Z = 3, S = 4, A = 4,nbChildren = 3, depth = 3,nbWords = No
     if nbWords ==  None :
         nbWords = int(RO.tLoad/6)
         
-    print 'parameters are\n Z:',Z,'\n depth:', depth,'\n number of children:', nbChildren,'\n number of blocks:', nbWords,'\n theoretic load of the tree:', RO.tLoad
+    print 'parameters are\n Z:',Z,'\n S:',S,'\n A:',A,'\n depth:', depth,'\n number of children:', nbChildren,'\n number of blocks:', nbWords,'\n theoretic load of the tree:', RO.tLoad
     
     t1 = time.time()
     
@@ -71,14 +75,13 @@ def test_real_example(Z = 3, S = 4, A = 4,nbChildren = 3, depth = 3,nbWords = No
         phoneNumbers = produce_phoneNumbers()
         # commitment on the phone number phoneNumbers[0] on other phone numbers phoneNumbers[1:]
         com , phi_x, phiprime_x = phone_number_PK.commitPhoneNode(G, phoneNumbers[0], phoneNumbers[1:])
-        blockID = 'Comit. of ☏# '+phoneNumbers[0]        
+        blockID = str(phoneNumbers[0].val)     
         phiprime_dic[blockID] = phiprime_x
         blockList.append((blockID,com))
         messagesList.append((phoneNumbers[0],phi_x, phiprime_x))
         
-    print 'List of blocks generated\n Filling up the tree'
-    
     t2 = time.time()
+    print 'List of blocks generated',t2-t1,(t2-t1)/nbWords,'\n Filling up the tree'
         
     RO.fillupTree(blockList)
     
@@ -91,4 +94,4 @@ def test_real_example(Z = 3, S = 4, A = 4,nbChildren = 3, depth = 3,nbWords = No
     pickle.dump(RO.sPD,f)
     f.close()
     
-    return RO,blockList,t2-t1,t3-t2
+    return RO,blockList,t2-t1,t3-t2, phiprime_dic, messagesList
