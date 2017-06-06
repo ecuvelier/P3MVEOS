@@ -98,6 +98,7 @@ def mulECP(ECG,P,alpha,sq= False, Jcoord=False):
         if not sq :
             return dbleAndAdd(ECG,P,alpha,daddEFp,doubleEFp,Jcoord)
         else :
+            #print 'MulECP Jcoord',Jcoord
             return dbleAndAdd(ECG,P,alpha,daddEFp2,doubleEFp2,Jcoord)
 
 def dbleAndAdd(ECG,P,alpha,addition,doubling,Jcoord = False):
@@ -122,8 +123,10 @@ def dbleAndAdd(ECG,P,alpha,addition,doubling,Jcoord = False):
         Q = dbleAndAdd(ECG,P,(alpha-1)/2,addition,doubling,Jcoord)
         return addition(ECG,P,doubling(ECG,Q,Jcoord),Jcoord)
     elif alpha%2 == 0 :
+        #print 'doubling Jcoord',Jcoord
         Q = dbleAndAdd(ECG,P,alpha/2,addition,doubling,Jcoord)
-        return doubling(ECG,Q,Jcoord)
+        #print 'doubling Jcoord',doubling, Jcoord
+        return doubling(ECG,Q,Jcoord=Jcoord)
 
 def squareAndMultiply(F,x,u,multiply,square,tab=None):
     ''' Return x**u using square and multiply
@@ -202,6 +205,7 @@ def precomp_comb2(w,m,P,add,mul):
     d = int(math.ceil(float(m)/w))
     Pstar = ()
     for i in range(w-1,-1,-1):
+        #print 'here',i,P
         ent = mul(P,2**(i*d))
         Pstar = Pstar + (ent,)
     e = int(math.ceil(d/2))
@@ -328,7 +332,7 @@ def doubleEFp(ECG,P,Jcoord=False,T1=None):
             Qinf = False
         return Xq,Yq,Qinf
 
-def daddEFp(ECG,P1,P2, Jcoord=False,tab = None):
+def daddEFp(ECG,P1,P2,tab = None, Jcoord=False):
     '''
     This method returns Q=P1+P2
     - ECG is an EC curve group
@@ -575,6 +579,17 @@ def addEFp2(ECG,P1,P2,Jcoord=False):
                 return zero,zero,one,zero,True
             else :
                 return daddEFp2(ECG,P1,P2,Jcoord=Jcoord)
+                
+def negEFp2(P,Jcoord=False):
+    '''
+    This method returns -P as a tuple of 6 or 5 elements
+    '''
+    if Jcoord :
+        X10,X11,Y10,Y11,Z10,Z11 = P
+        return X10,X11,-Y10,-Y11,Z10,Z11
+    else :
+        X10,X11,Y10,Y11,Pinf = P
+        return X10,X11,-Y10,-Y11,Pinf
 
 def daddEFp2(ECG,P1,P2,tab=None,Jcoord=False):
     '''
@@ -628,7 +643,7 @@ def daddEFp2(ECG,P1,P2,tab=None,Jcoord=False):
             Xq0,Xq1 = (n0+G0-2*V0)%p,(n1+G1-2*V1)%p # Xq = (R**2+G-2*V)%p
             o0,o1 = mul2(R0,R1,V0-Xq0,V1-Xq1)
             p0,p1 = mul2(S10,S11,G0,G1)
-            Yp30,Yp31 = (o0-p0)%p,(o1-p1)%p # Yq = (R*(V-Xq)-S1*G)%p
+            Yq0,Yq1 = (o0-p0)%p,(o1-p1)%p # Yq = (R*(V-Xq)-S1*G)%p
             q0,q1 = mul2(Zp10,Zp11,Zp20,Zp21)
             r0,r1 = mul2(q0,q1,H0,H1)
             Zq0,Zq1 = r0%p,r1%p # Zq = (Zp1*Zp2*H)%p
@@ -687,6 +702,8 @@ def doubleEFp2(ECG,P,tab=None,Jcoord=False):
     def invert2(a0,a1,p):
         c = gmpy.invert(a0**2+a1**2,p)
         return a0*c,-a1*c
+        
+    #print 'doubleEFP2 Jcoord', Jcoord
 
     if Jcoord :
         Xp0,Xp1,Yp0,Yp1,Zp0,Zp1 = P
@@ -768,9 +785,9 @@ def mul_comb2_EFp2(ECG,alpha,tab,Jcoord):
     - the method returns a tuple in Jcoord if Jcoord is true and in affine otherwise
     '''
     def dadd(P1,P2):
-        return daddEFp2(ECG,P1,P2, Jcoord)
+        return daddEFp2(ECG,P1,P2, Jcoord=Jcoord)
     def dble(P):
-        return doubleEFp2(ECG,P,Jcoord)
+        return doubleEFp2(ECG,P,Jcoord=Jcoord)
     def inf(P):
         if Jcoord :
             return (P[4] == 0) and (P[5] == 0)

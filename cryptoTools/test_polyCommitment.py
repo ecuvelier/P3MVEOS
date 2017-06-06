@@ -100,8 +100,7 @@ class TestPolyCommitment(unittest.TestCase):
         
         com2_x, phi2prime_x = self.pC_PK.rerandomize(com1,phi1prime_x,phi1second_x)
         
-        self.assertTrue(self.pC_PK.verifyPoly(com2_x,phi1_x,phi2prime_x))
-        
+        self.assertTrue(self.pC_PK.verifyPoly(com2_x,phi1_x,phi2prime_x)) 
         
 
     def test_multiplication_of_commitment_by_a_scalar(self):

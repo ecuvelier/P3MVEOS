@@ -13,6 +13,7 @@ import tools.utils as utils
 import mathTools.pairing as pair
 import mathTools.field as field
 import mathTools.otosEC as oEC
+import math
 import gmpy
 
 class PCommitment_Secret_Key(fingexp.FingExp):
@@ -40,6 +41,15 @@ class PCommitment_Public_Key(fingexp.FingExp):
         self.gVec = gVec
         self.hVec = hVec
         self.gprimeVec = gprimeVec
+        self.gVecTab = []
+        self.hVecTab = []
+        self.gprimeVecTab = []
+        
+        self.w = 10
+        self.m = len(utils.binn(self.pairing.r))
+        self.d = int(math.ceil(float(self.m)/self.w))
+        self.e = int(math.ceil(float(self.d)/2))
+        self.Jcoord = True
 
         
         self.to_fingerprint = ["pairing","deg_pol","gVec","hVec","gprimeVec"]
@@ -63,6 +73,12 @@ class PCommitment_Public_Key(fingexp.FingExp):
         generates the public key from generators g,h and the secret key SK_PC
         the method (re-)initialize self.gVec and self.hVec
         '''
+        """
+        if self.Jcoord :
+            g.toJcoord()
+            h.toJcoord()
+            gp.toJcoord()
+        """
         alpha = SK_PC.alpha
         gVec = [g]
         hVec = [h]
@@ -84,6 +100,17 @@ class PCommitment_Public_Key(fingexp.FingExp):
         self.gVec = gVec
         self.hVec = hVec
         self.gprimeVec = gprimeVec
+        
+        for i in range(len(gVec)):
+            gVec_i = gVec[i]
+            hVec_i = hVec[i]
+            gpVec_i = gprimeVec[i]
+            tb_gVec_i = oEC.prec_comb2_EFp(self.w,self.m,gVec_i,self.Jcoord),self.w,self.m,self.d,self.e
+            self.gVecTab.append(tb_gVec_i)
+            tb_hVec_i = oEC.prec_comb2_EFp(self.w,self.m,hVec_i,self.Jcoord),self.w,self.m,self.d,self.e
+            self.hVecTab.append(tb_hVec_i)
+            tb_gpVec_i = oEC.prec_comb2_EFp2(self.w,self.m,gpVec_i,self.Jcoord),self.w,self.m,self.d,self.e
+            self.gprimeVecTab.append(tb_gpVec_i)
         
     def hashf(self,L):
         ''' Return a number in Zr computed from a list L of elements
@@ -134,11 +161,21 @@ class PCommitment_Public_Key(fingexp.FingExp):
             phiprime_x = new_phiprime_x
                 
         c = EFp.infty
-        #TODO: Optimize here
+        ct = oEC.toTupleEFp(c,self.Jcoord)
+        #TODO: Optimize here # DONE
         for i in range(self.deg_pol+1):
-            c = c + (phi_x.coef[i].val)*self.gVec[i] + (phiprime_x.coef[i].val)*self.hVec[i]
-            
-        com = PolynomialCommitment(c,self)
+            #c = c + (phi_x.coef[i].val)*self.gVec[i] + (phiprime_x.coef[i].val)*self.hVec[i]
+            a = oEC.mul_comb2_EFp(EFp,phi_x.coef[i].val,self.gVecTab[i],self.Jcoord)
+            b = oEC.mul_comb2_EFp(EFp,phiprime_x.coef[i].val,self.hVecTab[i],self.Jcoord)
+            a_plus_b = oEC.addEFp(EFp, a,b,self.Jcoord)
+            ct = oEC.addEFp(EFp, ct,a_plus_b,self.Jcoord)
+        
+        cg = oEC.toEFp(EFp,ct,self.Jcoord)
+        if self.Jcoord :
+            cg.toAffine()
+        #assert cg == c
+        #print 'cg,c',cg,c
+        com = PolynomialCommitment(cg,self)
             
         return com, phiprime_x
         
@@ -146,12 +183,27 @@ class PCommitment_Public_Key(fingexp.FingExp):
         '''
         Return a polynomial commitment with a new randomness polynomial
         '''
-        new_phi_x, n_c = self.commit_messages([self.Fr.zero()],phisecond_x)
-        new_com, phisecond_x = n_c
+        EFp = self.pairing.EFp
+        if phisecond_x == None :
+            phisecond_x = self.randomPolynomial()
+            
+        c = com.c
+        ct = oEC.toTupleEFp(c,self.Jcoord)
+        #TODO: Optimize here #DONE
+        for i in range(self.deg_pol+1):
+            #c = c + (phisecond_x.coef[i].val)*self.hVec[i]
+            b = oEC.mul_comb2_EFp(EFp,phisecond_x.coef[i].val,self.hVecTab[i],self.Jcoord)
+            ct = oEC.addEFp(EFp, ct,b,self.Jcoord)
         
-        rerand_com = new_com+com
+        cg = oEC.toEFp(EFp,ct,self.Jcoord)
+        if self.Jcoord :
+            cg.toAffine()
+        #assert c == cg
+            
+        rerand_com =  PolynomialCommitment(cg, self)
         
         return rerand_com, phiprime_x+phisecond_x
+        
         
     def commit_messages(self,messageslist,phiprime_x= None):
         '''
@@ -189,11 +241,21 @@ class PCommitment_Public_Key(fingexp.FingExp):
         EFp = self.pairing.EFp
         
         c_prime = EFp.infty
+        ct = oEC.toTupleEFp(c_prime,self.Jcoord)
         #TODO: Optimize here
         for i in range(self.deg_pol+1):
-            c_prime = c_prime + (phi_x.coef[i].val)*self.gVec[i] + (phiprime_x.coef[i].val)*self.hVec[i]
+            #c_prime = c_prime + (phi_x.coef[i].val)*self.gVec[i] + (phiprime_x.coef[i].val)*self.hVec[i]
+            a = oEC.mul_comb2_EFp(EFp,phi_x.coef[i].val,self.gVecTab[i],self.Jcoord)
+            b = oEC.mul_comb2_EFp(EFp,phiprime_x.coef[i].val,self.hVecTab[i],self.Jcoord)
+            a_plus_b = oEC.addEFp(EFp, a,b,self.Jcoord)
+            ct = oEC.addEFp(EFp, ct,a_plus_b,self.Jcoord)
             
-        return com.c == c_prime
+        cg = oEC.toEFp(EFp,ct,self.Jcoord)
+        if self.Jcoord :
+            cg.toAffine()
+        #assert c_prime == cg
+            
+        return com.c == cg
     
     def createWitness(self,phi_x,phiprime_x,b):
         '''
@@ -227,26 +289,50 @@ class PCommitment_Public_Key(fingexp.FingExp):
         Return True if the verification succeeds.
         This method computes 3 pairings.
         '''
-        
+        EFp = self.pairing.EFp
         e = oEC.OptimAtePairing
         Pair = self.pairing
-        g = self.gVec[-1]
-        h = self.hVec[-1]
+        Fp12 = Pair.Fpk
+        #gamma = Pair.gamma
+        #g = self.gVec[-1]
+        #h = self.hVec[-1]
         gp = self.gprimeVec[-1]
+        EFp2 = gp.ECG
         gp_alpha = self.gprimeVec[-2]
         
-        #TODO: Optimize here
-        gprime_b = (b.val)*gp
-        t1 = gp_alpha-gprime_b
-        u1 = (phi_b.val)*g + (phiprime_b.val)*h
+        #TODO: Optimize here # DONE
+        #gprime_b = (b.val)*gp
+        gprime_bt = oEC.mul_comb2_EFp2(EFp2,b.val,self.gprimeVecTab[-1],self.Jcoord)
+        mgprime_bt = oEC.negEFp2(gprime_bt,self.Jcoord)
+        gpat = oEC.toTupleEFp2(gp_alpha,self.Jcoord)
+        t1t = oEC.addEFp2(EFp2,gpat,mgprime_bt,self.Jcoord)
+        #t1 = gp_alpha-gprime_b
+        #u1 = (phi_b.val)*g + (phiprime_b.val)*h
+        a1 = oEC.mul_comb2_EFp(EFp,phi_b.val,self.gVecTab[-1],self.Jcoord)
+        b1 = oEC.mul_comb2_EFp(EFp,phiprime_b.val,self.hVecTab[-1],self.Jcoord)
+        u1t = oEC.addEFp(EFp,a1,b1,self.Jcoord)
         
-        return e(com.c,gp,Pair) == e(w_b.c,t1,Pair)*e(u1,gp,Pair)
+        t1g = oEC.toEFp2(EFp2,t1t,self.Jcoord)
+        u1g = oEC.toEFp(EFp,u1t,self.Jcoord)
+        if self.Jcoord :
+            t1g.toAffine()
+            u1g.toAffine()
+        #assert t1g == t1
+        #assert u1g == u1
+            
+        rm = e(com.c,gp,Pair)
+        lm1 = e(w_b.c,t1g,Pair)
+        lm2 = e(u1g,gp,Pair)
+        lm = oEC.mulFp12(Fp12,lm1,lm2)
+        
+        return rm == lm
         
     def createWitnessBatch(self, phi_x, phiprime_x, B):
         '''
         Return a witness w_b for the list of points (b_j,phi(b_j)) where b_j in 
         the list B to prove latter that each phi(b_j) is the evaluation of phi on b_j
         '''
+        
         Fr = self.Fr
 
         prod_x_minus_b_j = field.polynom(Fr,[Fr.one()])
@@ -275,6 +361,7 @@ class PCommitment_Public_Key(fingexp.FingExp):
         Pair = self.pairing
         gp = self.gprimeVec[-1]
         EFp2 = gp.ECG
+        Fp12 = Pair.Fpk
 
         
         prod_x_minus_b_j = field.polynom(Fr,[Fr.one()])
@@ -290,14 +377,30 @@ class PCommitment_Public_Key(fingexp.FingExp):
             prod_x_minus_b_j = new_prod_x_minus_b_j
             
         t1 = EFp2.infty
-        #TODO: Optimize here
+        t1t = oEC.toTupleEFp2(t1, self.Jcoord)
+        #TODO: Optimize here # DONE
         for i in range(self.deg_pol+1):
-            t1 +=  prod_x_minus_b_j.coef[i].val*self.gprimeVec[i]
+            #t1 +=  prod_x_minus_b_j.coef[i].val*self.gprimeVec[i]
+            a = oEC.mul_comb2_EFp2(EFp2,prod_x_minus_b_j.coef[i].val,self.gprimeVecTab[i],self.Jcoord)
+            t1t = oEC.addEFp2(EFp2,t1t,a,self.Jcoord)
+            
+        t1g = oEC.toEFp2(EFp2,t1t,self.Jcoord)
+        if self.Jcoord :
+            t1g.toAffine()
+        
+        #assert t1g == t1
         
         
         u1 , rem2_x = self.commit(rem1_x,rem2_x) 
         
-        return e(com.c,gp,Pair) == e(w_B.c,t1,Pair)*e(u1.c,gp,Pair)
+        rm = e(com.c,gp,Pair)
+        lm1 = e(w_B.c,t1g,Pair)
+        lm2 = e(u1.c,gp,Pair)
+        lm = oEC.mulFp12(Fp12,lm1,lm2)
+        
+        return rm == lm
+        
+        #return  e(com.c,gp,Pair)== e(w_B.c,t1,Pair)*e(u1.c,gp,Pair)
 
         
     def queryZKS(self, com, phi_x, phiprime_x, b, b_is_root_of_phi_x, khi_x = None, khiprime_x = None):
@@ -305,15 +408,25 @@ class PCommitment_Public_Key(fingexp.FingExp):
         Returns a non-interactive zero-knowledge proof of knowledge that phi(b)
         = 0 or phi(b) != 0 where phi is the polynomial commited to in com.
         '''
+        EFp = self.pairing.EFp
+        
         b, phi_b_eval, phiprime_b_eval, w_b = self.createWitness(phi_x,phiprime_x,b)
         if b_is_root_of_phi_x :
             assert phi_b_eval.iszero()
             return b, w_b, phiprime_b_eval, None
         else :
-            #TODO: Optimize here
-            z_j = phi_b_eval.val*self.gVec[-1] + phiprime_b_eval.val*self.hVec[-1]
+            #TODO: Optimize here #DONE
+            #z_j = phi_b_eval.val*self.gVec[-1] + phiprime_b_eval.val*self.hVec[-1]
+            a = oEC.mul_comb2_EFp(EFp, phi_b_eval.val, self.gVecTab[-1],self.Jcoord)
+            b = oEC.mul_comb2_EFp(EFp, phiprime_b_eval.val, self.hVecTab[-1],self.Jcoord)
+            z_jt = oEC.addEFp(EFp,a,b,self.Jcoord)
+            z_jg = oEC.toEFp(EFp,z_jt,self.Jcoord)
+            if self.Jcoord :
+                z_jg.toAffine()
+            
+            #assert z_j == z_jg
             proof_z_j = self.openingNIZKPOK(com,phi_x,phiprime_x,khi_x,khiprime_x)
-            return b, w_b, None, (z_j, proof_z_j)
+            return b, w_b, None, (z_jg, proof_z_j)
         
     def openingNIZKPOK(self, com, phi_x, phiprime_x, khi_x = None, khiprime_x = None):
         if khi_x == None :
@@ -341,18 +454,36 @@ class PCommitment_Public_Key(fingexp.FingExp):
         Fr = self.Fr
         e = oEC.OptimAtePairing
         Pair = self.pairing
+        Fp12 = Pair.Fpk
         gp = self.gprimeVec[-1]
+        gp_alpha = self.gprimeVec[-2]
+        EFp2 = gp.ECG
         bp, w_b, phiprime_b_eval, A = proof
         
         if A == None :
             return self.verifyEval(com, b, Fr.zero(), phiprime_b_eval, w_b)
         elif phiprime_b_eval == None :
-            #TODO: Optimize here
+            #TODO: Optimize here # DONE
             z_j, proof_z_j = A
             cond1 = self.checkOpeningNIZKPOK(com,proof_z_j)
-            gprime_b = b.val*gp
-            gprime_alpha_minus_b = self.gprimeVec[-2]-gprime_b
-            cond2 = e(com.c,gp,Pair) == e(w_b.c,gprime_alpha_minus_b,Pair)*e(z_j,gp,Pair)
+            #gprime_b = b.val*gp
+            gprime_bt = oEC.mul_comb2_EFp2(EFp2,b.val,self.gprimeVecTab[-1],self.Jcoord)
+            mgprime_bt = oEC.negEFp2(gprime_bt,self.Jcoord)
+            gpat = oEC.toTupleEFp2(gp_alpha,self.Jcoord)
+            t1t = oEC.addEFp2(EFp2,gpat,mgprime_bt,self.Jcoord)
+            t1g = oEC.toEFp2(EFp2,t1t,self.Jcoord) 
+            if self.Jcoord :
+                t1g.toAffine()
+            #gprime_alpha_minus_b = self.gprimeVec[-2]-gprime_b
+            #assert gprime_alpha_minus_b == t1g
+                
+            rm = e(com.c,gp,Pair)
+            lm1 = e(w_b.c,t1g,Pair)
+            lm2 = e(z_j,gp,Pair)
+            lm = oEC.mulFp12(Fp12,lm1,lm2)
+            
+            #cond2 = e(com.c,gp,Pair) == e(w_b.c,t1g,Pair)*e(z_j,gp,Pair)
+            cond2 = rm == lm
             return cond1 and cond2
         else :
             return False
