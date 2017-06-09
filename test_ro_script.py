@@ -11,9 +11,11 @@ import cryptoTools.polyCommitment as pC
 import pathORAM.ringORAM as ringO
 import time
 import pickle
+import random
+import matplotlib.pyplot as plt
 
 poly_deg = 10
-nbOfDigits = 9
+nbOfDigits = 5
 pC_SK = pC.PCommitment_Secret_Key(Fr.random().val)
 g0 = P
 h0 = pC_SK.alpha*g0
@@ -60,7 +62,7 @@ def test_real_example(Z = 4, S = 4, A = 4,nbChildren = 2, depth = 3,nbWords = No
     RO = ringO.RingORAM(po_tree,Z = Z, S=S, A=A , nbChildren = nbChildren, depth = depth, createDummyBlock = cDB, rerandomizeBlock= rB)
     
     if nbWords ==  None :
-        nbWords = int(RO.tLoad/6)
+        nbWords = int(RO.tLoad/4)
         
     print 'parameters are\n Z:',Z,'\n S:',S,'\n A:',A,'\n depth:', depth,'\n number of children:', nbChildren,'\n number of blocks:', nbWords,'\n theoretic load of the tree:', RO.tLoad
     
@@ -95,3 +97,31 @@ def test_real_example(Z = 4, S = 4, A = 4,nbChildren = 2, depth = 3,nbWords = No
     f.close()
     
     return RO,blockList,t2-t1,t3-t2, phiprime_dic, messagesList
+    
+    
+def generating_queries(RO,n):
+    print RO.positionMap
+    keys = RO.positionMap.keys()
+    clientStashSize = []
+    dummyStashSize = []
+    t_mean = 0
+    for i in range(n):
+        blockID = random.sample(keys,1)[0]
+        print '\n ###\t query nb',i, 'on block', blockID
+        t1 = time.time()
+        RO.queryBlock(blockID)
+        t2 = time.time()
+        t_mean += t2-t1
+        clientStashSize.append(len(RO.clientStash))
+        dummyStashSize.append(len(RO.dummyStash))
+        RO.checkSync()
+        print RO.positionMap
+        
+    #plt.plot(range(n), clientStashSize)
+    plt.plot(range(n), dummyStashSize)
+    plt.show()
+    
+    print t_mean/n, 'sec per query'
+    print RO.dummyCounter, 'dummy blocks created'
+        
+    return clientStashSize,dummyStashSize
