@@ -15,7 +15,7 @@ import random
 import matplotlib.pyplot as plt
 
 poly_deg = 10
-nbOfDigits = 5
+nbOfDigits = 9
 pC_SK = pC.PCommitment_Secret_Key(Fr.random().val)
 g0 = P
 h0 = pC_SK.alpha*g0
@@ -115,9 +115,9 @@ def generating_queries(RO,n):
         clientStashSize.append(len(RO.clientStash))
         dummyStashSize.append(len(RO.dummyStash))
         RO.checkSync()
-        print RO.positionMap
+        #print RO.positionMap
         
-    #plt.plot(range(n), clientStashSize)
+    plt.plot(range(n), clientStashSize)
     plt.plot(range(n), dummyStashSize)
     plt.show()
     

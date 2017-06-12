@@ -627,18 +627,18 @@ class RingORAM :
         
         path_to_evict = self.orderedPathList[self.path_counter % len(self.orderedPathList)]
         
-        print '\t eviction of path', path_to_evict
+        #print '\t eviction of path', path_to_evict
         
         indexesList = pathToIndexList(path_to_evict,self.nbChildren,self.SZ)
         niL = []
-        for i in range(0,len(indexesList)/self.SZ,self.SZ) :
+        for i in range(0,len(indexesList),self.SZ) :
             realblocklist = []
             dummyblocklist = []
             for j in range(self.SZ):
                 index = indexesList[i+j]
                 if self.positionList[index][2] == False:
                     pass
-                elif self.positionList[index][0] == None :
+                elif self.positionList[index][0] == None  :
                     dummyblocklist.append(index)
                 else :
                     realblocklist.append(index)
@@ -655,7 +655,7 @@ class RingORAM :
             niL += rbucket
                 
             
-                        
+        #print 'retrieving indexes', niL
             
         #blockList = self.POTree.getBlocks(indexesList) # Reading the tree
         blockList = self.POTree.getBlocks(niL) # Reading the tree
@@ -679,6 +679,8 @@ class RingORAM :
             # This loop retrieves the real blocks from blockList and save them in the stash
             if self.positionList[index][0] == None :
                 pass
+            elif self.positionList[index][0] ==  'real' :
+                assert False
             else:
                 # the block is not a dummy block
                 blockID = self.positionList[index][0]
@@ -687,7 +689,7 @@ class RingORAM :
                 
                 self.clientStash[blockID] = self.rerandomizeBlock(bL_copy.pop(bL_copy.index(block_i)),blockID)
                 self.positionMap[blockID] = 'stash', path_i
-                print '(3)updtating position map of ',blockID, 'to ','stash', path_i
+                #print '(3)updtating position map of ',blockID, 'to ','stash', path_i
                 #tbI.append(blockID)
                 #added_to_stash += 1
         
@@ -741,7 +743,7 @@ class RingORAM :
         - buckets_to_reshuffle_list contains the positions of the first block for
         each bucket
         '''
-        print '\t early reshuffling of buckets', buckets_to_reshuffle_list
+        #print '\t early reshuffling of buckets', buckets_to_reshuffle_list
         
         btrs = buckets_to_reshuffle_list+[]
         btrs.reverse() # begin with the deeper buckets
@@ -760,6 +762,7 @@ class RingORAM :
                 if not blockID == None and not blockID == 'real':
                     b_ID_List.append(blockID)
                     self.clientStash[blockID] = self.rerandomizeBlock(block_i,blockID)
+                    self.positionMap[blockID] = 'stash',path
                     nblock = (True,first_pos+len(new_bucket),blockID)
                     #print 'inserting nblock (1)', nblock
                     new_bucket.append(nblock)
@@ -777,10 +780,10 @@ class RingORAM :
                 new_candidates = self.getBucketCandidates(bucket_path)
                 for b_ID in new_candidates :
                     if not b_ID in b_ID_List and not len(b_ID_List) >= self.Z :
-                        nblock = (True,first_pos+len(b_ID_List),b_ID)
+                        nblock = (True,first_pos+len(new_bucket),b_ID)
                         #print 'inserting nblock (2)', nblock
                         new_bucket.append(nblock)
-                        print 'reinserting',b_ID, 'from stash'
+                        #print 'reinserting',b_ID, 'from stash'
                         b_ID_List.append(b_ID)
                         
             while len(new_bucket)< self.SZ :
@@ -788,6 +791,8 @@ class RingORAM :
                 nblock = (False,first_pos+len(new_bucket),dummyBlock)
                 #print 'inserting nblock (3)', nblock
                 new_bucket.append(nblock)
+                
+            assert len(new_bucket) == self.SZ
             
             perm_bucket = self.reshuffleBucket(new_bucket)
             new_blockList += perm_bucket
@@ -795,7 +800,13 @@ class RingORAM :
             
         self.POTree.writeBlocks(new_blockList)
                         
-                
+    
+    def check_insertion(self,position,blockID):
+        for b_ID in self.positionMap :
+            pos,path = self.positionMap[b_ID]
+            if position == pos and not pos == 'stash' :
+                print position,blockID,self.positionMap
+                assert b_ID == blockID
     
     def reshuffleBucket(self,bucket):
         '''
@@ -810,12 +821,16 @@ class RingORAM :
         
         first_pos = bucket[0][1]
         
-        print '\t --> reshuffling bucket', first_pos,'to',first_pos+self.SZ
+        #print '\t --> reshuffling bucket', first_pos,'to',first_pos+self.SZ-1
         
         #for i in range(len(bucket)):
         #    positionL.append(bucket[i][1])
+        
+        #print 'bucket',bucket
                         
         perm_bucket = randomPermutation(bucket)
+        
+        #print 'perm_bucket',perm_bucket
             
         for i in range(len(bucket)):
             #position = positionL[i]
@@ -824,19 +839,26 @@ class RingORAM :
                 # a real block
                 blockID = perm_bucket[i][2]
                 block = self.clientStash.pop(blockID)
+                assert block != None
                 #print 're-inserting block',blockID,'from stash'
                 old_pos, path = self.positionMap[blockID]
                 assert not path == None
                 self.positionList[position] = blockID,path,True
+                #print '(3) modifying positionList at',position 
+                #self.check_insertion(position,blockID)
                 self.positionMap[blockID] = position, path
-                print '(1) updtating position map of ',blockID, 'to ',position, path
-                perm_bucket[i] = (position,block)
+                #print '(1) updtating position map of ',blockID, 'to ',position, path
+                perm_bucket[i] = (position,blockID,block)
             else :
                 # a dummy block
                 self.positionList[position] = None,None,True
-                perm_bucket[i] = (position,perm_bucket[i][2])
+                #print '(4) modifying positionList at',position 
+                perm_bucket[i] = (position,'dummy',perm_bucket[i][2])
                 
         #print 'permuted bucket', perm_bucket
+        
+        for i in range(len(perm_bucket)):
+            perm_bucket[i] = (perm_bucket[i][0], perm_bucket[i][2])
                 
         subpath = positionToSubPath(perm_bucket[0][0],self.nbChildren,self.SZ,self.depth,self.sPD)
         B = []
@@ -852,19 +874,20 @@ class RingORAM :
         by selecting them randomly in each bucket among the dummy blocks except
         for the bucket (if any) containing the real block.
         '''
-        print position,indexesList
+        #print position,indexesList
 
         assert len(indexesList)/self.SZ == self.depth+1
         select_indexesList = []
         reshuffle_bucket_list = [] # keeps track of the bucket that will be reshuffled after the execution of the method
         for i in range(self.depth+1):
             bucket = indexesList[i*self.SZ:(i+1)*self.SZ]
-            print 'visiting bucket', bucket
+            #print 'visiting bucket', bucket
             if position in bucket :
-                print self.positionList[position]
+                #print self.positionList[position]
                 assert self.positionList[position][2] == True
                 select_indexesList.append(position)
                 self.positionList[position] = 'real',None,False
+                #print '(1) modifying positionList at',position 
                 
             else :
                 randomBlocks = [] # collects the dummy blocks not visited yet
@@ -879,6 +902,7 @@ class RingORAM :
                 randBlock_index = randomBlocks[r]
                 select_indexesList.append(randBlock_index)
                 self.positionList[randBlock_index] = None,None,False
+                #print '(2) modifying positionList at',randBlock_index 
                     
             count = 0 # keeps track of the number of blocks visited yet in the bucket
             for index in bucket :
@@ -890,7 +914,7 @@ class RingORAM :
             elif count == self.S-1 :
                 # this bucket needs to be re-shuffled
                 reshuffle_bucket_list.append(indexesList[i*self.SZ])
-            print 'counter for bucket', bucket,'equals',count
+            #print 'counter for bucket', bucket,'equals',count
         
         assert len(select_indexesList) == self.depth+1
         return select_indexesList, reshuffle_bucket_list
@@ -919,9 +943,9 @@ class RingORAM :
         
         indexesList = pathToIndexList(path,self.nbChildren,self.SZ)
         
-        print 'blockID',blockID,' at position', position
+        #print 'blockID',blockID,' at position', position
         
-        print 'seeking path',path, 'returned indexesList',indexesList
+        #print 'seeking path',path, 'returned indexesList',indexesList
         
         assert ((position != 'stash') and (position in indexesList)) or (position == 'stash')
         
@@ -932,7 +956,7 @@ class RingORAM :
         # the list of indexes to visit (according to ring ORAM)
         select_indexesList, buckets_to_reshuffle_list = self.selectIndexes(indexesList,position)
         
-        print 'select_indexesList are',select_indexesList
+        #print 'select_indexesList are',select_indexesList
         
         blockList = self.POTree.getBlocks(select_indexesList)
         
@@ -947,8 +971,9 @@ class RingORAM :
             #print 'querriedBlock',querriedBlock
             self.clientStash[blockID] = self.rerandomizeBlock(querriedBlock,blockID)
         
+        
         self.positionMap[blockID] = 'stash', new_path
-        print '(2)updtating position map of ',blockID, 'to ','stash', path
+        #print '(2)updtating position map of ',blockID, 'to ','stash', path
         
         #for index in select_indexesList:
         #    self.positionList[index] = None,None,False # False means the dummy blocks have been visited 
